@@ -1,0 +1,50 @@
+{
+  "name": "offerslu-back-end",
+  "version": "1.0.0",
+  "description": "Admin backend for managing offers (Express.js + Sequelize + MySQL)",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "db:seed": "node src/scripts/seedAdmin.js",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write ."
+  },
+  "keywords": [
+    "express",
+    "sequelize",
+    "mysql",
+    "admin",
+    "offers"
+  ],
+  "author": "",
+  "license": "ISC",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "compression": "^1.8.1",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.3.2",
+    "helmet": "^8.1.0",
+    "joi": "^18.1.2",
+    "jsonwebtoken": "^9.0.3",
+    "morgan": "^1.10.1",
+    "multer": "^2.1.1",
+    "mysql2": "^3.22.1",
+    "sequelize": "^6.37.8",
+    "winston": "^3.19.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
+    "nodemon": "^3.1.14",
+    "prettier": "^3.8.3"
+  }
+}
