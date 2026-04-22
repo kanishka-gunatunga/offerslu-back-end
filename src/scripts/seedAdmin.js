@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Seeds the single admin user from ADMIN_USERNAME / ADMIN_PASSWORD env vars.
+ * Seeds the single admin user from ADMIN_EMAIL / ADMIN_PASSWORD env vars.
  * Idempotent: if admin already exists, it will not be replaced.
  * Pass --reset-password to forcefully reset the admin password to ADMIN_PASSWORD.
  */
@@ -18,25 +18,24 @@ const run = async () => {
     await sequelize.authenticate();
     await sequelize.sync();
 
-    const existing = await User.findOne({ where: { username: env.admin.username } });
+    const existing = await User.findOne({ where: { email: env.admin.email } });
 
     if (existing) {
       if (resetPassword) {
-        existing.password = env.admin.password;
+        existing.passwordHash = env.admin.password;
         existing.isActive = true;
         await existing.save();
-        logger.info(`Admin user "${env.admin.username}" password reset.`);
+        logger.info(`Admin user "${env.admin.email}" password reset.`);
       } else {
-        logger.info(`Admin user "${env.admin.username}" already exists. Skipping.`);
+        logger.info(`Admin user "${env.admin.email}" already exists. Skipping.`);
       }
     } else {
       await User.create({
-        username: env.admin.username,
-        password: env.admin.password,
-        role: 'admin',
+        email: env.admin.email,
+        passwordHash: env.admin.password,
         isActive: true,
       });
-      logger.info(`Admin user "${env.admin.username}" created.`);
+      logger.info(`Admin user "${env.admin.email}" created.`);
     }
 
     await sequelize.close();

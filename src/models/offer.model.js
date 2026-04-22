@@ -8,44 +8,48 @@ module.exports = (sequelize) => {
   Offer.init(
     {
       id: {
-        type: DataTypes.INTEGER.UNSIGNED,
-        autoIncrement: true,
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
         primaryKey: true,
       },
       title: {
-        type: DataTypes.STRING(200),
+        type: DataTypes.STRING(255),
         allowNull: false,
-        validate: { notEmpty: true, len: [1, 200] },
+        validate: { notEmpty: true, len: [1, 255] },
       },
       description: {
         type: DataTypes.TEXT,
         allowNull: false,
         validate: { notEmpty: true },
       },
-      merchantId: {
-        type: DataTypes.INTEGER.UNSIGNED,
+      heroImageUrl: {
+        type: DataTypes.STRING(600),
         allowNull: false,
       },
-      expiryDate: {
+      companyName: {
+        type: DataTypes.STRING(160),
+        allowNull: false,
+      },
+      companyLogoUrl: {
+        type: DataTypes.STRING(600),
+        allowNull: true,
+      },
+      startDate: {
+        type: DataTypes.DATEONLY,
+        allowNull: false,
+      },
+      endDate: {
+        type: DataTypes.DATEONLY,
+        allowNull: false,
+      },
+      isInactive: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      deletedAt: {
         type: DataTypes.DATE,
-        allowNull: false,
-      },
-      attachmentPath: {
-        type: DataTypes.STRING(500),
         allowNull: true,
-      },
-      attachmentName: {
-        type: DataTypes.STRING(255),
-        allowNull: true,
-      },
-      attachmentMimeType: {
-        type: DataTypes.STRING(150),
-        allowNull: true,
-      },
-      status: {
-        type: DataTypes.ENUM('active', 'inactive'),
-        allowNull: false,
-        defaultValue: 'active',
       },
     },
     {
@@ -54,9 +58,10 @@ module.exports = (sequelize) => {
       tableName: 'offers',
       indexes: [
         { fields: ['title'] },
-        { fields: ['expiry_date'] },
-        { fields: ['merchant_id'] },
-        { fields: ['status'] },
+        { fields: ['company_name'] },
+        { fields: ['start_date'] },
+        { fields: ['end_date'] },
+        { fields: ['is_inactive'] },
       ],
     }
   );

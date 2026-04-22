@@ -12,12 +12,6 @@ const startServer = async () => {
   try {
     await connectDatabase();
 
-    if (!env.isProd) {
-      // In development, sync schema (non-destructive).
-      await sequelize.sync({ alter: false });
-      logger.info('Database models synchronized.');
-    }
-
     server = app.listen(env.port, () => {
       logger.info(`Server running in ${env.nodeEnv} mode on port ${env.port}`);
       logger.info(`API base: http://localhost:${env.port}${env.apiPrefix}`);

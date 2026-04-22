@@ -1,212 +1,376 @@
 'use strict';
 
-const path = require('path');
-const fs = require('fs/promises');
 const { Op } = require('sequelize');
-const { Offer, Category, Merchant, sequelize } = require('../models');
+const {
+  Offer,
+  OfferType,
+  Category,
+  Merchant,
+  Payment,
+  Bank,
+  Location,
+  sequelize,
+} = require('../models');
 const ApiError = require('../utils/ApiError');
-const { parsePagination, buildPageMeta } = require('../utils/pagination');
-const logger = require('../config/logger');
+const env = require('../config/env');
+const { ensureImageSignature } = require('../middlewares/upload.middleware');
+const { saveImage, removeByUrl } = require('./fileStorage.service');
+const { parseIdArrayField, requireNonEmptyArray } = require('../utils/requestParsers');
 
 const offerIncludes = [
-  { model: Merchant, as: 'merchant' },
+  { model: OfferType, as: 'offerTypes', through: { attributes: [] } },
   { model: Category, as: 'categories', through: { attributes: [] } },
+  { model: Merchant, as: 'merchants', through: { attributes: [] } },
+  { model: Payment, as: 'payments', through: { attributes: [] } },
+  { model: Bank, as: 'banks', through: { attributes: [] } },
+  { model: Location, as: 'locations', through: { attributes: [] } },
 ];
 
-const normalizeCategoryIds = (value) => {
-  if (Array.isArray(value)) return value.map(Number).filter(Number.isFinite);
-  if (typeof value === 'string') {
-    return value
-      .split(',')
-      .map((v) => Number(v.trim()))
-      .filter(Number.isFinite);
+const toAdminOffer = (offerInstance) => {
+  const offer = offerInstance.toJSON();
+  return {
+    id: offer.id,
+    title: offer.title,
+    companyName: offer.companyName,
+    companyLogoUrl: offer.companyLogoUrl || '',
+    heroImageUrl: offer.heroImageUrl,
+    description: offer.description,
+    category: (offer.categories || []).map((item) => item.name).join(', '),
+    offerType: (offer.offerTypes || []).map((item) => item.name).join(', '),
+    startDate: offer.startDate,
+    endDate: offer.endDate,
+    offerTypeIds: (offer.offerTypes || []).map((item) => item.id),
+    categoryIds: (offer.categories || []).map((item) => item.id),
+    merchantIds: (offer.merchants || []).map((item) => item.id),
+    paymentIds: (offer.payments || []).map((item) => item.id),
+    bankIds: (offer.banks || []).map((item) => item.id),
+    locationIds: (offer.locations || []).map((item) => item.id),
+    isInactive: offer.isInactive,
+  };
+};
+
+const assertEntityIds = async (Model, ids, fieldName) => {
+  const uniqueIds = [...new Set(ids)];
+  const found = await Model.findAll({ where: { id: uniqueIds } });
+  if (found.length !== uniqueIds.length) {
+    throw ApiError.badRequest('VALIDATION_ERROR', {
+      fields: [{ field: fieldName, message: `Some ${fieldName} do not exist` }],
+    });
   }
-  return [];
+  return uniqueIds;
 };
 
-const assertMerchantExists = async (merchantId) => {
-  const merchant = await Merchant.findByPk(merchantId);
-  if (!merchant) throw ApiError.badRequest(`Merchant not found (id=${merchantId})`);
-  return merchant;
-};
-
-const assertCategoriesExist = async (categoryIds) => {
-  const unique = [...new Set(categoryIds)];
-  if (!unique.length) throw ApiError.badRequest('At least one category is required');
-  const categories = await Category.findAll({ where: { id: unique } });
-  if (categories.length !== unique.length) {
-    const found = new Set(categories.map((c) => c.id));
-    const missing = unique.filter((id) => !found.has(id));
-    throw ApiError.badRequest(`Categories not found: ${missing.join(', ')}`);
+const validateDates = (startDate, endDate) => {
+  if (!startDate || !endDate) {
+    throw ApiError.badRequest('VALIDATION_ERROR', {
+      fields: [{ field: 'startDate', message: 'startDate and endDate are required' }],
+    });
   }
-  return categories;
-};
-
-const removeFileSafe = async (relativePath) => {
-  if (!relativePath) return;
-  try {
-    const abs = path.resolve(process.cwd(), relativePath);
-    await fs.unlink(abs);
-  } catch (err) {
-    if (err.code !== 'ENOENT') {
-      logger.warn(`Failed to remove file ${relativePath}: ${err.message}`);
-    }
+  if (new Date(startDate).getTime() > new Date(endDate).getTime()) {
+    throw ApiError.badRequest('VALIDATION_ERROR', {
+      fields: [{ field: 'endDate', message: 'endDate must be >= startDate' }],
+    });
   }
 };
 
-const mapAttachment = (file) =>
-  file
-    ? {
-        attachmentPath: path.relative(process.cwd(), file.path).replace(/\\/g, '/'),
-        attachmentName: file.originalname,
-        attachmentMimeType: file.mimetype,
-      }
-    : {};
+const parsePayload = (payload) => {
+  const parsed = {
+    title: (payload.title || '').trim(),
+    description: (payload.description || '').trim(),
+    startDate: payload.startDate,
+    endDate: payload.endDate,
+    offerTypeIds: parseIdArrayField(payload, 'offerTypeIds'),
+    categoryIds: parseIdArrayField(payload, 'categoryIds'),
+    merchantIds: parseIdArrayField(payload, 'merchantIds'),
+    paymentIds: parseIdArrayField(payload, 'paymentIds'),
+    bankIds: parseIdArrayField(payload, 'bankIds'),
+    locationIds: parseIdArrayField(payload, 'locationIds'),
+    companyName: payload.companyName ? String(payload.companyName).trim() : '',
+    companyLogoUrl: payload.companyLogoUrl ? String(payload.companyLogoUrl).trim() : null,
+  };
+  return parsed;
+};
 
-const createOffer = async (payload, file) => {
-  const categoryIds = normalizeCategoryIds(payload.categoryIds);
-  await assertMerchantExists(payload.merchantId);
-  await assertCategoriesExist(categoryIds);
+const assertCreatePayload = (payload) => {
+  if (!payload.title)
+    throw ApiError.badRequest('VALIDATION_ERROR', {
+      fields: [{ field: 'title', message: 'Required' }],
+    });
+  if (!payload.description) {
+    throw ApiError.badRequest('VALIDATION_ERROR', {
+      fields: [{ field: 'description', message: 'Required' }],
+    });
+  }
+  validateDates(payload.startDate, payload.endDate);
+  requireNonEmptyArray(payload.offerTypeIds, 'offerTypeIds');
+  requireNonEmptyArray(payload.categoryIds, 'categoryIds');
+  requireNonEmptyArray(payload.merchantIds, 'merchantIds');
+  requireNonEmptyArray(payload.paymentIds, 'paymentIds');
+  requireNonEmptyArray(payload.bankIds, 'bankIds');
+  requireNonEmptyArray(payload.locationIds, 'locationIds');
+};
+
+const enrichCompanyInfo = async (payload) => {
+  if (payload.companyName) return payload;
+
+  const firstMerchant = await Merchant.findByPk(payload.merchantIds[0]);
+  if (!firstMerchant) return payload;
+
+  return {
+    ...payload,
+    companyName: firstMerchant.name,
+    companyLogoUrl: payload.companyLogoUrl || firstMerchant.logoUrl || null,
+  };
+};
+
+const createOffer = async (rawPayload, file) => {
+  const payload = await enrichCompanyInfo(parsePayload(rawPayload));
+  assertCreatePayload(payload);
+  if (!file) {
+    throw ApiError.badRequest('VALIDATION_ERROR', {
+      fields: [{ field: 'heroImageFile', message: 'Required for create' }],
+    });
+  }
+
+  ensureImageSignature(file, { maxSizeBytes: env.upload.heroImageMaxSizeBytes });
+
+  await Promise.all([
+    assertEntityIds(OfferType, payload.offerTypeIds, 'offerTypeIds'),
+    assertEntityIds(Category, payload.categoryIds, 'categoryIds'),
+    assertEntityIds(Merchant, payload.merchantIds, 'merchantIds'),
+    assertEntityIds(Payment, payload.paymentIds, 'paymentIds'),
+    assertEntityIds(Bank, payload.bankIds, 'bankIds'),
+    assertEntityIds(Location, payload.locationIds, 'locationIds'),
+  ]);
 
   const t = await sequelize.transaction();
+  let uploaded = null;
+
   try {
     const offer = await Offer.create(
       {
         title: payload.title,
         description: payload.description,
-        merchantId: payload.merchantId,
-        expiryDate: payload.expiryDate,
-        status: payload.status || 'active',
-        ...mapAttachment(file),
+        companyName: payload.companyName,
+        companyLogoUrl: payload.companyLogoUrl,
+        startDate: payload.startDate,
+        endDate: payload.endDate,
+        heroImageUrl: '/uploads/pending',
       },
       { transaction: t }
     );
 
-    await offer.setCategories(categoryIds, { transaction: t });
-    await t.commit();
+    uploaded = await saveImage({ entity: 'offers', entityId: offer.id, file });
+    await offer.update({ heroImageUrl: uploaded.relativeUrl }, { transaction: t });
 
-    return Offer.findByPk(offer.id, { include: offerIncludes });
+    await Promise.all([
+      offer.setOfferTypes(payload.offerTypeIds, { transaction: t }),
+      offer.setCategories(payload.categoryIds, { transaction: t }),
+      offer.setMerchants(payload.merchantIds, { transaction: t }),
+      offer.setPayments(payload.paymentIds, { transaction: t }),
+      offer.setBanks(payload.bankIds, { transaction: t }),
+      offer.setLocations(payload.locationIds, { transaction: t }),
+    ]);
+
+    await t.commit();
+    const created = await Offer.findByPk(offer.id, { include: offerIncludes });
+    return toAdminOffer(created);
   } catch (err) {
     await t.rollback();
-    if (file) await removeFileSafe(path.relative(process.cwd(), file.path));
+    if (uploaded?.relativeUrl) await removeByUrl(uploaded.relativeUrl);
     throw err;
   }
 };
 
-const updateOffer = async (id, payload, file) => {
-  const offer = await Offer.findByPk(id);
-  if (!offer) throw ApiError.notFound('Offer not found');
+const updateOffer = async (id, rawPayload, file) => {
+  const offer = await Offer.findByPk(id, { include: offerIncludes });
+  if (!offer) throw ApiError.notFound('NOT_FOUND');
+
+  const payload = await enrichCompanyInfo(parsePayload(rawPayload));
+  if (payload.startDate || payload.endDate) {
+    validateDates(payload.startDate || offer.startDate, payload.endDate || offer.endDate);
+  }
 
   const t = await sequelize.transaction();
-  try {
-    if (payload.merchantId) await assertMerchantExists(payload.merchantId);
+  let uploaded = null;
+  let previousHeroImageUrl = null;
 
-    let categoryIds;
-    if (payload.categoryIds !== undefined) {
-      categoryIds = normalizeCategoryIds(payload.categoryIds);
-      await assertCategoriesExist(categoryIds);
-    }
+  try {
+    if (payload.offerTypeIds.length)
+      await assertEntityIds(OfferType, payload.offerTypeIds, 'offerTypeIds');
+    if (payload.categoryIds.length)
+      await assertEntityIds(Category, payload.categoryIds, 'categoryIds');
+    if (payload.merchantIds.length)
+      await assertEntityIds(Merchant, payload.merchantIds, 'merchantIds');
+    if (payload.paymentIds.length) await assertEntityIds(Payment, payload.paymentIds, 'paymentIds');
+    if (payload.bankIds.length) await assertEntityIds(Bank, payload.bankIds, 'bankIds');
+    if (payload.locationIds.length)
+      await assertEntityIds(Location, payload.locationIds, 'locationIds');
 
     const updates = {};
-    ['title', 'description', 'merchantId', 'expiryDate', 'status'].forEach((key) => {
-      if (payload[key] !== undefined) updates[key] = payload[key];
-    });
-
-    let previousAttachment = null;
+    if (payload.title) updates.title = payload.title;
+    if (payload.description) updates.description = payload.description;
+    if (payload.startDate) updates.startDate = payload.startDate;
+    if (payload.endDate) updates.endDate = payload.endDate;
+    if (payload.companyName) updates.companyName = payload.companyName;
+    if (payload.companyLogoUrl !== undefined) updates.companyLogoUrl = payload.companyLogoUrl;
 
     if (file) {
-      previousAttachment = offer.attachmentPath;
-      Object.assign(updates, mapAttachment(file));
-    } else if (payload.removeAttachment) {
-      previousAttachment = offer.attachmentPath;
-      updates.attachmentPath = null;
-      updates.attachmentName = null;
-      updates.attachmentMimeType = null;
+      ensureImageSignature(file, { maxSizeBytes: env.upload.heroImageMaxSizeBytes });
+      previousHeroImageUrl = offer.heroImageUrl;
+      uploaded = await saveImage({ entity: 'offers', entityId: offer.id, file });
+      updates.heroImageUrl = uploaded.relativeUrl;
     }
 
-    await offer.update(updates, { transaction: t });
-    if (categoryIds) {
-      await offer.setCategories(categoryIds, { transaction: t });
+    if (Object.keys(updates).length > 0) {
+      await offer.update(updates, { transaction: t });
     }
+
+    if (payload.offerTypeIds.length)
+      await offer.setOfferTypes(payload.offerTypeIds, { transaction: t });
+    if (payload.categoryIds.length)
+      await offer.setCategories(payload.categoryIds, { transaction: t });
+    if (payload.merchantIds.length)
+      await offer.setMerchants(payload.merchantIds, { transaction: t });
+    if (payload.paymentIds.length) await offer.setPayments(payload.paymentIds, { transaction: t });
+    if (payload.bankIds.length) await offer.setBanks(payload.bankIds, { transaction: t });
+    if (payload.locationIds.length)
+      await offer.setLocations(payload.locationIds, { transaction: t });
+
     await t.commit();
 
-    if (previousAttachment) await removeFileSafe(previousAttachment);
+    if (
+      previousHeroImageUrl &&
+      uploaded?.relativeUrl &&
+      previousHeroImageUrl !== uploaded.relativeUrl
+    ) {
+      await removeByUrl(previousHeroImageUrl);
+    }
 
-    return Offer.findByPk(id, { include: offerIncludes });
+    const updated = await Offer.findByPk(id, { include: offerIncludes });
+    return toAdminOffer(updated);
   } catch (err) {
     await t.rollback();
-    if (file) await removeFileSafe(path.relative(process.cwd(), file.path));
+    if (uploaded?.relativeUrl) await removeByUrl(uploaded.relativeUrl);
     throw err;
   }
 };
 
 const deleteOffer = async (id) => {
   const offer = await Offer.findByPk(id);
-  if (!offer) throw ApiError.notFound('Offer not found');
-  const attachment = offer.attachmentPath;
-  await offer.destroy();
-  if (attachment) await removeFileSafe(attachment);
+  if (!offer) throw ApiError.notFound('NOT_FOUND');
+  if (offer.isInactive) return;
+  offer.isInactive = true;
+  offer.deletedAt = new Date();
+  await offer.save();
 };
 
 const getOffer = async (id) => {
   const offer = await Offer.findByPk(id, { include: offerIncludes });
-  if (!offer) throw ApiError.notFound('Offer not found');
-  return offer;
+  if (!offer) throw ApiError.notFound('NOT_FOUND');
+  return toAdminOffer(offer);
+};
+
+const buildStatusWhere = (status) => {
+  const today = new Date().toISOString().slice(0, 10);
+  if (!status || status === 'all') return {};
+  if (status === 'inactive') return { isInactive: true };
+  if (status === 'upcoming') return { isInactive: false, startDate: { [Op.gt]: today } };
+  if (status === 'expired') return { isInactive: false, endDate: { [Op.lt]: today } };
+  if (status === 'active') {
+    return {
+      isInactive: false,
+      startDate: { [Op.lte]: today },
+      endDate: { [Op.gte]: today },
+    };
+  }
+  return {};
+};
+
+const sortMap = {
+  startDesc: ['startDate', 'DESC'],
+  startAsc: ['startDate', 'ASC'],
+  endAsc: ['endDate', 'ASC'],
+  titleAsc: ['title', 'ASC'],
+  titleDesc: ['title', 'DESC'],
 };
 
 const listOffers = async (query) => {
-  const { page, limit, offset } = parsePagination(query);
-  const where = {};
-  const now = new Date();
+  const page = Math.max(Number(query.page) || 1, 1);
+  const pageSize = Math.min(Math.max(Number(query.pageSize) || 10, 5), 50);
+  const offset = (page - 1) * pageSize;
 
-  if (query.status) where.status = query.status;
-  if (query.merchantId) where.merchantId = query.merchantId;
+  const where = {
+    ...buildStatusWhere(query.status),
+  };
 
-  if (query.search) {
-    const like = `%${query.search}%`;
-    where[Op.or] = [{ title: { [Op.like]: like } }, { description: { [Op.like]: like } }];
-  }
-
-  if (query.expired === true) where.expiryDate = { [Op.lt]: now };
-  else if (query.expired === false) where.expiryDate = { [Op.gte]: now };
-
-  if (query.expiryFrom || query.expiryTo) {
-    where.expiryDate = where.expiryDate || {};
-    if (query.expiryFrom) where.expiryDate[Op.gte] = new Date(query.expiryFrom);
-    if (query.expiryTo) where.expiryDate[Op.lte] = new Date(query.expiryTo);
+  if (query.q) {
+    const like = `%${String(query.q).trim()}%`;
+    where[Op.or] = [
+      { title: { [Op.like]: like } },
+      { companyName: { [Op.like]: like } },
+      { description: { [Op.like]: like } },
+    ];
   }
 
   const include = [
-    { model: Merchant, as: 'merchant' },
+    {
+      model: OfferType,
+      as: 'offerTypes',
+      through: { attributes: [] },
+      ...(query.offerType ? { where: { id: query.offerType }, required: true } : {}),
+    },
     {
       model: Category,
       as: 'categories',
       through: { attributes: [] },
-      ...(query.categoryId ? { where: { id: query.categoryId }, required: true } : {}),
+      ...(query.category ? { where: { id: query.category }, required: true } : {}),
+    },
+    {
+      model: Merchant,
+      as: 'merchants',
+      through: { attributes: [] },
+      ...(query.merchant ? { where: { id: query.merchant }, required: true } : {}),
+    },
+    {
+      model: Payment,
+      as: 'payments',
+      through: { attributes: [] },
+    },
+    {
+      model: Bank,
+      as: 'banks',
+      through: { attributes: [] },
+      ...(query.bank ? { where: { id: query.bank }, required: true } : {}),
+    },
+    {
+      model: Location,
+      as: 'locations',
+      through: { attributes: [] },
+      ...(query.location ? { where: { id: query.location }, required: true } : {}),
     },
   ];
 
-  // When filtering by category we must ensure distinct count
+  const order = [sortMap[query.sort] || sortMap.startDesc];
   const { rows, count } = await Offer.findAndCountAll({
     where,
     include,
-    order: [[query.sortBy || 'createdAt', query.sortOrder || 'DESC']],
-    limit,
+    order,
+    limit: pageSize,
     offset,
     distinct: true,
     subQuery: false,
   });
 
   return {
-    items: rows,
-    meta: buildPageMeta({ total: count, page, limit }),
+    items: rows.map(toAdminOffer),
+    meta: {
+      page,
+      pageSize,
+      totalItems: count,
+      totalPages: Math.max(Math.ceil(count / pageSize), 1),
+    },
   };
 };
 
-module.exports = {
-  createOffer,
-  updateOffer,
-  deleteOffer,
-  getOffer,
-  listOffers,
-};
+module.exports = { createOffer, updateOffer, deleteOffer, getOffer, listOffers };

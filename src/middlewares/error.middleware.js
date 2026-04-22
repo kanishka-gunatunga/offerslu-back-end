@@ -48,11 +48,18 @@ const errorHandler = (err, req, res, _next) => {
   }
 
   const body = {
-    success: false,
-    message: error.message,
+    error: {
+      code: error.message || 'INTERNAL_ERROR',
+      message: error.message || 'Internal Server Error',
+    },
   };
-  if (error.details) body.details = error.details;
-  if (!env.isProd && err.stack) body.stack = err.stack;
+  if (error.details?.fields) {
+    body.error.fields = error.details.fields.reduce((acc, item) => {
+      if (item.field) acc[item.field] = item.message;
+      return acc;
+    }, {});
+  }
+  if (!env.isProd && err.stack) body.error.stack = err.stack;
 
   res.status(error.statusCode).json(body);
 };
