@@ -2,65 +2,70 @@
 
 const Joi = require('joi');
 
-const categoryIdsSchema = Joi.alternatives().try(
-  Joi.array().items(Joi.number().integer().positive()).min(1),
-  Joi.string().custom((value, helpers) => {
-    const ids = value
-      .split(',')
-      .map((v) => Number(v.trim()))
-      .filter((v) => Number.isFinite(v));
-    if (!ids.length) return helpers.error('any.invalid');
-    return ids;
-  })
+const idArraySchema = Joi.alternatives().try(
+  Joi.array().items(Joi.string().trim().min(1)).min(1),
+  Joi.string().trim().min(1)
 );
 
 const create = {
   body: Joi.object({
-    title: Joi.string().trim().min(1).max(200).required(),
+    title: Joi.string().trim().min(1).max(255).required(),
+    companyName: Joi.string().trim().min(1).max(160).optional(),
+    companyLogoUrl: Joi.string().trim().allow('').optional(),
     description: Joi.string().trim().min(1).required(),
-    merchantId: Joi.number().integer().positive().required(),
-    categoryIds: categoryIdsSchema.required(),
-    expiryDate: Joi.date().iso().greater('now').required(),
-    status: Joi.string().valid('active', 'inactive').default('active'),
-  }),
+    startDate: Joi.date().iso().required(),
+    endDate: Joi.date().iso().required(),
+    offerTypeIds: idArraySchema.required(),
+    categoryIds: idArraySchema.required(),
+    merchantIds: idArraySchema.required(),
+    paymentIds: idArraySchema.required(),
+    bankIds: idArraySchema.required(),
+    locationIds: idArraySchema.required(),
+  }).unknown(true),
 };
 
 const update = {
   params: Joi.object({
-    id: Joi.number().integer().positive().required(),
+    id: Joi.string().trim().required(),
   }),
   body: Joi.object({
-    title: Joi.string().trim().min(1).max(200),
+    title: Joi.string().trim().min(1).max(255),
+    companyName: Joi.string().trim().min(1).max(160).optional(),
+    companyLogoUrl: Joi.string().trim().allow('').optional(),
     description: Joi.string().trim().min(1),
-    merchantId: Joi.number().integer().positive(),
-    categoryIds: categoryIdsSchema,
-    expiryDate: Joi.date().iso(),
-    status: Joi.string().valid('active', 'inactive'),
-    removeAttachment: Joi.boolean(),
-  }).min(1),
+    startDate: Joi.date().iso(),
+    endDate: Joi.date().iso(),
+    offerTypeIds: idArraySchema,
+    categoryIds: idArraySchema,
+    merchantIds: idArraySchema,
+    paymentIds: idArraySchema,
+    bankIds: idArraySchema,
+    locationIds: idArraySchema,
+  })
+    .min(1)
+    .unknown(true),
 };
 
 const list = {
   query: Joi.object({
     page: Joi.number().integer().min(1).default(1),
-    limit: Joi.number().integer().min(1).max(100).default(10),
-    search: Joi.string().trim().max(200).allow(''),
-    merchantId: Joi.number().integer().positive(),
-    categoryId: Joi.number().integer().positive(),
-    status: Joi.string().valid('active', 'inactive'),
-    expired: Joi.boolean(),
-    expiryFrom: Joi.date().iso(),
-    expiryTo: Joi.date().iso(),
-    sortBy: Joi.string()
-      .valid('createdAt', 'updatedAt', 'expiryDate', 'title')
-      .default('createdAt'),
-    sortOrder: Joi.string().valid('ASC', 'DESC').default('DESC'),
+    pageSize: Joi.number().integer().min(5).max(50).default(10),
+    q: Joi.string().trim().max(200).allow(''),
+    status: Joi.string().valid('active', 'upcoming', 'expired', 'inactive', 'all').default('all'),
+    category: Joi.string().trim(),
+    offerType: Joi.string().trim(),
+    merchant: Joi.string().trim(),
+    bank: Joi.string().trim(),
+    location: Joi.string().trim(),
+    sort: Joi.string()
+      .valid('startDesc', 'startAsc', 'endAsc', 'titleAsc', 'titleDesc')
+      .default('startDesc'),
   }),
 };
 
 const byId = {
   params: Joi.object({
-    id: Joi.number().integer().positive().required(),
+    id: Joi.string().trim().required(),
   }),
 };
 

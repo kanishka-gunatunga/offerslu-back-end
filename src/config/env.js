@@ -9,7 +9,7 @@ dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 const envSchema = Joi.object({
   NODE_ENV: Joi.string().valid('development', 'production', 'test').default('development'),
   PORT: Joi.number().default(4000),
-  API_PREFIX: Joi.string().default('/api/v1'),
+  API_PREFIX: Joi.string().default('/api'),
 
   DB_HOST: Joi.string().required(),
   DB_PORT: Joi.number().default(3306),
@@ -19,19 +19,21 @@ const envSchema = Joi.object({
   DB_DIALECT: Joi.string().valid('mysql').default('mysql'),
   DB_LOGGING: Joi.boolean().default(false),
 
-  JWT_SECRET: Joi.string().min(16).required(),
-  JWT_EXPIRES_IN: Joi.string().default('1d'),
-
-  ADMIN_USERNAME: Joi.string().default('admin'),
+  ADMIN_EMAIL: Joi.string().email().default('admin@offerlu.local'),
   ADMIN_PASSWORD: Joi.string().min(6).default('admin123'),
+  ADMIN_SESSION_TTL_SECONDS: Joi.number().default(60 * 60 * 24 * 7),
+  ADMIN_COOKIE_NAME: Joi.string().default('offerlu_admin_session'),
 
   CORS_ORIGIN: Joi.string().default('*'),
+  TRUSTED_ORIGINS: Joi.string().allow('').default(''),
 
   RATE_LIMIT_WINDOW_MS: Joi.number().default(15 * 60 * 1000),
   RATE_LIMIT_MAX: Joi.number().default(300),
+  LOGIN_RATE_LIMIT_MAX: Joi.number().default(10),
 
   UPLOAD_DIR: Joi.string().default('uploads'),
   MAX_UPLOAD_SIZE_MB: Joi.number().default(10),
+  HERO_IMAGE_MAX_SIZE_MB: Joi.number().default(5),
 
   LOG_LEVEL: Joi.string().valid('error', 'warn', 'info', 'http', 'debug').default('info'),
 }).unknown(true);
@@ -59,26 +61,28 @@ module.exports = {
     logging: env.DB_LOGGING,
   },
 
-  jwt: {
-    secret: env.JWT_SECRET,
-    expiresIn: env.JWT_EXPIRES_IN,
-  },
-
   admin: {
-    username: env.ADMIN_USERNAME,
+    email: env.ADMIN_EMAIL,
     password: env.ADMIN_PASSWORD,
+    sessionTtlSeconds: env.ADMIN_SESSION_TTL_SECONDS,
+    cookieName: env.ADMIN_COOKIE_NAME,
   },
 
   corsOrigin: env.CORS_ORIGIN,
+  trustedOrigins: env.TRUSTED_ORIGINS
+    ? env.TRUSTED_ORIGINS.split(',').map((origin) => origin.trim())
+    : [],
 
   rateLimit: {
     windowMs: env.RATE_LIMIT_WINDOW_MS,
     max: env.RATE_LIMIT_MAX,
+    loginMax: env.LOGIN_RATE_LIMIT_MAX,
   },
 
   upload: {
     dir: env.UPLOAD_DIR,
     maxSizeBytes: env.MAX_UPLOAD_SIZE_MB * 1024 * 1024,
+    heroImageMaxSizeBytes: env.HERO_IMAGE_MAX_SIZE_MB * 1024 * 1024,
   },
 
   logLevel: env.LOG_LEVEL,

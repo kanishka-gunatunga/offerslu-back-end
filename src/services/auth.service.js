@@ -1,44 +1,74 @@
 'use strict';
 
-const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const env = require('../config/env');
 const ApiError = require('../utils/ApiError');
-const { User } = require('../models');
+const { AdminSession, User } = require('../models');
 
-const signToken = (user) =>
-  jwt.sign({ sub: user.id, username: user.username, role: user.role }, env.jwt.secret, {
-    expiresIn: env.jwt.expiresIn,
-  });
+const sha256 = (value) => crypto.createHash('sha256').update(value).digest('hex');
+const generateToken = () => crypto.randomBytes(48).toString('base64url');
 
-const login = async ({ username, password }) => {
-  const user = await User.findOne({ where: { username } });
+const sessionCookieOptions = {
+  httpOnly: true,
+  secure: env.isProd,
+  sameSite: 'lax',
+  path: '/',
+  maxAge: env.admin.sessionTtlSeconds * 1000,
+};
+
+const login = async ({ password }) => {
+  const user = await User.findOne({ where: { email: env.admin.email, isActive: true } });
   if (!user || !user.isActive) {
-    throw ApiError.unauthorized('Invalid username or password');
+    throw ApiError.unauthorized('INVALID_CREDENTIALS');
   }
 
   const isMatch = await user.comparePassword(password);
   if (!isMatch) {
-    throw ApiError.unauthorized('Invalid username or password');
+    throw ApiError.unauthorized('INVALID_CREDENTIALS');
   }
+
+  const rawToken = generateToken();
+  const expiresAt = new Date(Date.now() + env.admin.sessionTtlSeconds * 1000);
+
+  await AdminSession.create({
+    adminUserId: user.id,
+    tokenHash: sha256(rawToken),
+    expiresAt,
+  });
 
   user.lastLoginAt = new Date();
   await user.save();
 
-  return {
-    token: signToken(user),
-    expiresIn: env.jwt.expiresIn,
-    user: user.toJSON(),
-  };
+  return { sessionToken: rawToken };
 };
 
-const changePassword = async (user, { currentPassword, newPassword }) => {
-  const isMatch = await user.comparePassword(currentPassword);
-  if (!isMatch) {
-    throw ApiError.badRequest('Current password is incorrect');
+const getSessionByToken = async (sessionToken) => {
+  if (!sessionToken) return null;
+  const session = await AdminSession.findOne({
+    where: { tokenHash: sha256(sessionToken) },
+    include: [{ model: User, as: 'adminUser' }],
+  });
+
+  if (
+    !session ||
+    session.revokedAt ||
+    !session.adminUser ||
+    !session.adminUser.isActive ||
+    session.expiresAt.getTime() <= Date.now()
+  ) {
+    return null;
   }
-  user.password = newPassword;
-  await user.save();
-  return { success: true };
+
+  return session;
 };
 
-module.exports = { login, changePassword };
+const logout = async (sessionId) => {
+  if (!sessionId) return;
+  const existing = await AdminSession.findByPk(sessionId);
+  if (existing && !existing.revokedAt) {
+    existing.revokedAt = new Date();
+    await existing.save();
+  }
+};
+
+module.exports = { login, logout, getSessionByToken, sessionCookieOptions };

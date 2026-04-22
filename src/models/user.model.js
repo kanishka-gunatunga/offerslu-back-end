@@ -6,12 +6,12 @@ const bcrypt = require('bcryptjs');
 module.exports = (sequelize) => {
   class User extends Model {
     async comparePassword(plain) {
-      return bcrypt.compare(plain, this.password);
+      return bcrypt.compare(plain, this.passwordHash);
     }
 
     toJSON() {
       const values = { ...this.get() };
-      delete values.password;
+      delete values.passwordHash;
       return values;
     }
   }
@@ -19,24 +19,19 @@ module.exports = (sequelize) => {
   User.init(
     {
       id: {
-        type: DataTypes.INTEGER.UNSIGNED,
-        autoIncrement: true,
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
         primaryKey: true,
       },
-      username: {
-        type: DataTypes.STRING(64),
-        allowNull: false,
-        unique: true,
-        validate: { notEmpty: true, len: [3, 64] },
-      },
-      password: {
+      email: {
         type: DataTypes.STRING(255),
         allowNull: false,
+        unique: true,
+        validate: { notEmpty: true, isEmail: true, len: [6, 255] },
       },
-      role: {
-        type: DataTypes.ENUM('admin'),
+      passwordHash: {
+        type: DataTypes.STRING(255),
         allowNull: false,
-        defaultValue: 'admin',
       },
       isActive: {
         type: DataTypes.BOOLEAN,
@@ -50,17 +45,18 @@ module.exports = (sequelize) => {
     },
     {
       sequelize,
-      modelName: 'User',
-      tableName: 'users',
+      modelName: 'AdminUser',
+      tableName: 'admin_users',
+      indexes: [{ unique: true, fields: ['email'] }, { fields: ['is_active'] }],
       hooks: {
         beforeCreate: async (user) => {
-          if (user.password) {
-            user.password = await bcrypt.hash(user.password, 10);
+          if (user.passwordHash) {
+            user.passwordHash = await bcrypt.hash(user.passwordHash, 12);
           }
         },
         beforeUpdate: async (user) => {
-          if (user.changed('password')) {
-            user.password = await bcrypt.hash(user.password, 10);
+          if (user.changed('passwordHash')) {
+            user.passwordHash = await bcrypt.hash(user.passwordHash, 12);
           }
         },
       },

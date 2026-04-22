@@ -1,219 +1,109 @@
-# OffersLu Admin Back-End
+# Offerlu Backend (Admin + Public API)
 
-A Node.js + Express.js + MySQL (Sequelize) backend for the OffersLu admin panel.
-Single-admin authentication, offer management (CRUD + search + filters),
-categories & merchants as lookup resources, and file-attachment support.
+This backend is implemented to match the current Offerlu frontend contract:
 
-> Status: initial scaffold. APIs and models are intentionally conservative until
-> the UI designs and full requirements land.
+- Cookie session auth for admin routes
+- Offer CRUD with soft-delete (`isInactive`)
+- Master-data CRUD with soft-delete (`status = inactive`)
+- Image upload support for offers/categories/merchants/banks
+- Public `site-content` delivery endpoint
 
 ## Tech Stack
 
-- **Runtime:** Node.js 18+ (tested on 22)
-- **Framework:** Express 4
-- **ORM:** Sequelize 6 (MySQL)
-- **Auth:** JWT (stateless), bcrypt password hashing
-- **Validation:** Joi
-- **Uploads:** Multer (disk storage)
-- **Logging:** Winston + Morgan
-- **Security:** Helmet, CORS, express-rate-limit
-- **Tooling:** ESLint, Prettier, Nodemon
+- Node.js 18+
+- Express 5
+- Sequelize 6 + MySQL
+- Joi validation
+- Multer (memory uploads)
 
-## Project Structure
+## Quick Start
 
-```
-offerslu-back-end/
-├── src/
-│   ├── config/          # env, database, logger
-│   ├── controllers/     # HTTP handlers (thin)
-│   ├── middlewares/     # auth, validate, upload, error
-│   ├── models/          # Sequelize models + associations
-│   ├── routes/          # Express routers
-│   ├── services/        # Business logic
-│   ├── utils/           # ApiError, asyncHandler, pagination, responses
-│   ├── validators/      # Joi schemas
-│   ├── scripts/         # One-off scripts (seed admin)
-│   ├── app.js           # Express app (no listen)
-│   └── server.js        # Bootstrap + graceful shutdown
-├── uploads/             # Uploaded attachments (gitignored)
-├── logs/                # Winston log files (gitignored)
-├── .env.example
-├── .eslintrc.json
-├── .prettierrc.json
-├── nodemon.json
-└── package.json
-```
-
-## Getting Started
-
-### 1. Prerequisites
-
-- Node.js `>=18`
-- MySQL `>=8.0` (or compatible MariaDB)
-- An empty database, e.g.:
-
-  ```sql
-  CREATE DATABASE offerslu CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-  ```
-
-### 2. Install dependencies
+1. Install:
 
 ```bash
 npm install
 ```
 
-### 3. Configure environment
-
-Copy `.env.example` to `.env` and fill in the values:
+2. Create env:
 
 ```bash
 cp .env.example .env
 ```
 
-**Important:** set a strong `JWT_SECRET` and change `ADMIN_PASSWORD` before running
-the seed. Never commit `.env`.
+3. Configure `.env` (`DB_*`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `API_PREFIX`).
 
-### 4. Create the admin user
-
-This script ensures the single admin account exists. Safe to run multiple times.
+4. Recreate DB schema (destructive):
 
 ```bash
-npm run db:seed
+npm run db:setup
 ```
 
-To force-reset the admin password to the one in `.env`:
+5. Start server:
 
 ```bash
-node src/scripts/seedAdmin.js --reset-password
-```
-
-### 5. Run the server
-
-```bash
-# Development (auto-reload)
 npm run dev
-
-# Production
-npm start
 ```
 
-Server runs on `http://localhost:4000` by default. API base: `http://localhost:4000/api/v1`.
+## API Groups
 
-## API Overview
+All endpoints are under `${API_PREFIX}`.
 
-All endpoints are prefixed by `API_PREFIX` (default `/api/v1`).
-All endpoints except `POST /auth/login` and `GET /health` require a Bearer token.
+### Admin Auth
 
-### Auth
+- `POST /admin/auth/login` body `{ "password": "..." }` -> `204`
+- `POST /admin/auth/logout` -> `204`
+- `GET /admin/auth/session` -> `200 { authenticated: true }` or `401 { authenticated: false }`
 
-| Method | Path                    | Description                       |
-| ------ | ----------------------- | --------------------------------- |
-| POST   | `/auth/login`           | Login (username, password)        |
-| GET    | `/auth/me`              | Get current admin user            |
-| POST   | `/auth/change-password` | Change the admin's password       |
-| POST   | `/auth/logout`          | No-op on the server (stateless)   |
+Cookie used: `offerlu_admin_session` (`HttpOnly`, `SameSite=Lax`, `Path=/`, 7 days, `Secure` in production).
 
-### Offers
+### Admin Offers
 
-| Method | Path           | Description                                                   |
-| ------ | -------------- | ------------------------------------------------------------- |
-| GET    | `/offers`      | List offers (pagination, search, filters, sort)               |
-| GET    | `/offers/:id`  | Get offer with merchant & categories                          |
-| POST   | `/offers`      | Create offer (multipart/form-data, field `attachment` optional) |
-| PATCH  | `/offers/:id`  | Update offer (multipart/form-data; `removeAttachment=true` supported) |
-| DELETE | `/offers/:id`  | Delete offer (also removes attachment file)                   |
+- `POST /admin/offers` (multipart, `heroImageFile` required)
+- `PATCH /admin/offers/:id` (multipart, `heroImageFile` optional)
+- `GET /admin/offers`
+- `GET /admin/offers/:id`
+- `DELETE /admin/offers/:id` (soft delete only)
 
-**List filters (query params):**
-`page`, `limit`, `search`, `merchantId`, `categoryId`, `status` (`active`|`inactive`),
-`expired` (`true`|`false`), `expiryFrom`, `expiryTo`, `sortBy`
-(`createdAt`|`updatedAt`|`expiryDate`|`title`), `sortOrder` (`ASC`|`DESC`).
+Dashboard list query params:
+`q`, `status`, `category`, `offerType`, `merchant`, `bank`, `location`, `sort`, `page`, `pageSize`.
 
-**Offer create/update body (multipart):**
+### Admin Master Data
 
-- `title` — string, required on create
-- `description` — string, required on create
-- `merchantId` — integer, required on create
-- `categoryIds` — array or comma-separated string (e.g. `1,2,3`), required on create
-- `expiryDate` — ISO date, required on create
-- `status` — `active` (default) | `inactive`
-- `attachment` — file (optional)
-- `removeAttachment` — boolean (update only)
+`GET|POST|PATCH|DELETE /admin/master-data/:entity`
 
-### Categories
+Entities:
 
-| Method | Path              | Description       |
-| ------ | ----------------- | ----------------- |
-| GET    | `/categories`     | List / search     |
-| GET    | `/categories/:id` | Get by id         |
-| POST   | `/categories`     | Create            |
-| PATCH  | `/categories/:id` | Update            |
-| DELETE | `/categories/:id` | Delete            |
+- `offer-types`
+- `categories`
+- `merchants`
+- `payments`
+- `banks`
+- `locations`
 
-### Merchants
+Image fields:
 
-| Method | Path             | Description      |
-| ------ | ---------------- | ---------------- |
-| GET    | `/merchants`     | List / search    |
-| GET    | `/merchants/:id` | Get by id        |
-| POST   | `/merchants`     | Create           |
-| PATCH  | `/merchants/:id` | Update           |
-| DELETE | `/merchants/:id` | Delete           |
+- categories: `bannerImageFile`
+- merchants: `logoImageFile`
+- banks: `logoImageFile`
 
-### Dashboard
+### Public
 
-| Method | Path                | Description                               |
-| ------ | ------------------- | ----------------------------------------- |
-| GET    | `/dashboard/stats`  | Totals: offers (all/active/expired/soon), merchants, categories |
+- `GET /public/site-content`
 
-### Uploads
-
-Files are served at `/uploads/<filename>`. The offer object returns
-`attachmentPath` (relative, e.g. `uploads/xxx.pdf`), `attachmentName` (original
-filename) and `attachmentMimeType`.
-
-## Response Envelope
-
-All endpoints use a consistent shape:
-
-```json
-{
-  "success": true,
-  "message": "...",
-  "data": { },
-  "meta": { "total": 0, "page": 1, "limit": 10, "totalPages": 1 }
-}
-```
-
-Errors:
-
-```json
-{
-  "success": false,
-  "message": "Validation failed",
-  "details": { "fields": [{ "field": "title", "message": "\"title\" is required" }] }
-}
-```
+Returns:
+`siteName`, `hero`, `categories`, `promotionSections`, `promotions`, `banks`, `about`, `socialLinks`.
 
 ## Scripts
 
-| Command              | Purpose                                 |
-| -------------------- | --------------------------------------- |
-| `npm run dev`        | Start server with nodemon               |
-| `npm start`          | Start server (production)               |
-| `npm run db:seed`    | Create/ensure the admin user            |
-| `npm run lint`       | ESLint check                            |
-| `npm run lint:fix`   | ESLint auto-fix                         |
-| `npm run format`     | Prettier format                         |
+- `npm run dev` - start development server
+- `npm start` - start production server
+- `npm run db:setup` - recreate schema and seed default admin/site content
+- `npm run db:seed` - seed/reset admin account only
+- `npm run lint` - run eslint
+- `npm run format` - run prettier
 
-## Notes & Next Steps
+## Important Notes
 
-- In development, the server calls `sequelize.sync({ alter: false })` so tables
-  are created if missing. For production deployments prefer real migrations
-  (e.g. `sequelize-cli`) — this will be added once the schema stabilizes.
-- The attachment upload is a single file per offer; switch to `upload.array()`
-  if multiple attachments are later required.
-- Search is implemented as `LIKE %term%` on `title` and `description`. If the
-  offer list grows large, consider a dedicated full-text index or a search
-  service.
-- Only one admin is assumed for now. If multi-user admin is required, the
-  `User.role` enum and the auth middleware already leave room for expansion.
+- `db:setup` currently uses `sequelize.sync({ force: true })` to recreate schema.
+- Upload validation checks MIME type and file signature.
+- Offer list filters/sorting/pagination are executed server-side.

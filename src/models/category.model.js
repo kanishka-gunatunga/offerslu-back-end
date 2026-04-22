@@ -8,35 +8,34 @@ module.exports = (sequelize) => {
   Category.init(
     {
       id: {
-        type: DataTypes.INTEGER.UNSIGNED,
-        autoIncrement: true,
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
         primaryKey: true,
       },
       name: {
-        type: DataTypes.STRING(100),
-        allowNull: false,
-        unique: true,
-        validate: { notEmpty: true, len: [1, 100] },
-      },
-      slug: {
         type: DataTypes.STRING(120),
         allowNull: false,
-        unique: true,
+        validate: { notEmpty: true, len: [1, 120] },
       },
-      description: {
-        type: DataTypes.STRING(500),
+      parentId: {
+        type: DataTypes.UUID,
         allowNull: true,
       },
-      isActive: {
-        type: DataTypes.BOOLEAN,
+      bannerImageUrl: {
+        type: DataTypes.STRING(600),
+        allowNull: true,
+      },
+      status: {
+        type: DataTypes.ENUM('active', 'inactive'),
         allowNull: false,
-        defaultValue: true,
+        defaultValue: 'active',
       },
     },
     {
       sequelize,
       modelName: 'Category',
       tableName: 'categories',
+      indexes: [{ fields: ['parent_id'] }, { fields: ['status'] }, { fields: ['name'] }],
     }
   );
 

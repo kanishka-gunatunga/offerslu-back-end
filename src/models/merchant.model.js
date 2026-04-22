@@ -8,48 +8,34 @@ module.exports = (sequelize) => {
   Merchant.init(
     {
       id: {
-        type: DataTypes.INTEGER.UNSIGNED,
-        autoIncrement: true,
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
         primaryKey: true,
       },
       name: {
-        type: DataTypes.STRING(150),
+        type: DataTypes.STRING(160),
         allowNull: false,
-        unique: true,
-        validate: { notEmpty: true, len: [1, 150] },
+        validate: { notEmpty: true, len: [1, 160] },
       },
-      slug: {
-        type: DataTypes.STRING(180),
-        allowNull: false,
-        unique: true,
-      },
-      email: {
-        type: DataTypes.STRING(150),
-        allowNull: true,
-        validate: { isEmail: true },
-      },
-      phone: {
-        type: DataTypes.STRING(30),
-        allowNull: true,
-      },
-      website: {
-        type: DataTypes.STRING(255),
+      parentId: {
+        type: DataTypes.UUID,
         allowNull: true,
       },
       logoUrl: {
-        type: DataTypes.STRING(500),
+        type: DataTypes.STRING(600),
         allowNull: true,
       },
-      isActive: {
-        type: DataTypes.BOOLEAN,
+      status: {
+        type: DataTypes.ENUM('active', 'inactive'),
         allowNull: false,
-        defaultValue: true,
+        defaultValue: 'active',
       },
     },
     {
       sequelize,
       modelName: 'Merchant',
       tableName: 'merchants',
+      indexes: [{ fields: ['parent_id'] }, { fields: ['status'] }, { fields: ['name'] }],
     }
   );
 

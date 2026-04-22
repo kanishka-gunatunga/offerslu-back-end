@@ -8,11 +8,11 @@ module.exports = (sequelize) => {
   OfferCategory.init(
     {
       offerId: {
-        type: DataTypes.INTEGER.UNSIGNED,
+        type: DataTypes.UUID,
         primaryKey: true,
       },
       categoryId: {
-        type: DataTypes.INTEGER.UNSIGNED,
+        type: DataTypes.UUID,
         primaryKey: true,
       },
     },
@@ -20,7 +20,7 @@ module.exports = (sequelize) => {
       sequelize,
       modelName: 'OfferCategory',
       tableName: 'offer_categories',
-      timestamps: false,
+      indexes: [{ fields: ['offer_id'] }, { fields: ['category_id'] }],
     }
   );
 

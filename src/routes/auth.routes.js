@@ -5,26 +5,22 @@ const rateLimit = require('express-rate-limit');
 const controller = require('../controllers/auth.controller');
 const { validate } = require('../middlewares/validate.middleware');
 const { authenticate } = require('../middlewares/auth.middleware');
+const { verifyAdminOrigin } = require('../middlewares/csrf.middleware');
 const schemas = require('../validators/auth.validator');
+const env = require('../config/env');
 
 const router = express.Router();
 
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
+  windowMs: env.rateLimit.windowMs,
+  max: env.rateLimit.loginMax,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { success: false, message: 'Too many login attempts, please try again later.' },
+  message: { error: { code: 'RATE_LIMITED', message: 'Too many login attempts' } },
 });
 
 router.post('/login', loginLimiter, validate(schemas.login), controller.login);
-router.post('/logout', authenticate, controller.logout);
-router.get('/me', authenticate, controller.me);
-router.post(
-  '/change-password',
-  authenticate,
-  validate(schemas.changePassword),
-  controller.changePassword
-);
+router.post('/logout', authenticate, verifyAdminOrigin, controller.logout);
+router.get('/session', controller.sessionState);
 
 module.exports = router;
