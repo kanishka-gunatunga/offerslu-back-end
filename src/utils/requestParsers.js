@@ -1,6 +1,8 @@
 'use strict';
 
-const ApiError = require('./ApiError');
+const hasField = (body, key) =>
+  Object.prototype.hasOwnProperty.call(body || {}, key) ||
+  Object.prototype.hasOwnProperty.call(body || {}, `${key}[]`);
 
 const parseIdArrayField = (body, key) => {
   const direct = body[key];
@@ -33,12 +35,9 @@ const parseIdArrayField = (body, key) => {
   return [];
 };
 
-const requireNonEmptyArray = (items, fieldName) => {
-  if (!Array.isArray(items) || items.length < 1) {
-    throw ApiError.badRequest('VALIDATION_ERROR', {
-      fields: [{ field: fieldName, message: 'Required' }],
-    });
-  }
+const parseOptionalIdArrayField = (body, key) => {
+  if (!hasField(body, key)) return null;
+  return parseIdArrayField(body, key);
 };
 
-module.exports = { parseIdArrayField, requireNonEmptyArray };
+module.exports = { parseIdArrayField, parseOptionalIdArrayField, hasField };

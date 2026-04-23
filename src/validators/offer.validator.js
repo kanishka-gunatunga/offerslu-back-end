@@ -3,8 +3,8 @@
 const Joi = require('joi');
 
 const idArraySchema = Joi.alternatives().try(
-  Joi.array().items(Joi.string().trim().min(1)).min(1),
-  Joi.string().trim().min(1)
+  Joi.array().items(Joi.string().trim().min(1)).min(0),
+  Joi.string().trim().allow('')
 );
 
 const create = {
@@ -15,12 +15,12 @@ const create = {
     description: Joi.string().trim().min(1).required(),
     startDate: Joi.date().iso().required(),
     endDate: Joi.date().iso().required(),
-    offerTypeIds: idArraySchema.required(),
-    categoryIds: idArraySchema.required(),
-    merchantIds: idArraySchema.required(),
-    paymentIds: idArraySchema.required(),
-    bankIds: idArraySchema.required(),
-    locationIds: idArraySchema.required(),
+    offerTypeIds: idArraySchema.optional(),
+    categoryIds: idArraySchema.optional(),
+    merchantIds: idArraySchema.optional(),
+    paymentIds: idArraySchema.optional(),
+    bankIds: idArraySchema.optional(),
+    locationIds: idArraySchema.optional(),
   }).unknown(true),
 };
 
@@ -41,9 +41,7 @@ const update = {
     paymentIds: idArraySchema,
     bankIds: idArraySchema,
     locationIds: idArraySchema,
-  })
-    .min(1)
-    .unknown(true),
+  }).unknown(true),
 };
 
 const list = {

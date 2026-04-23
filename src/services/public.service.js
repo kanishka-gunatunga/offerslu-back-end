@@ -1,8 +1,8 @@
 'use strict';
 
-const { SiteContent, Category, Bank, Offer } = require('../models');
+const { Category, Bank, Offer } = require('../models');
 
-const fallbackSiteContent = async () => {
+const getSiteContent = async () => {
   const [categories, banks, promotions] = await Promise.all([
     Category.findAll({
       where: { status: 'active', parentId: null },
@@ -34,23 +34,6 @@ const fallbackSiteContent = async () => {
     about: {},
     socialLinks: [],
   };
-};
-
-const getSiteContent = async () => {
-  const content = await SiteContent.findOne({ where: { isDefault: true } });
-  if (content) {
-    return {
-      siteName: content.siteName,
-      hero: content.hero,
-      categories: content.categories,
-      promotionSections: content.promotionSections,
-      promotions: content.promotions,
-      banks: content.banks,
-      about: content.about,
-      socialLinks: content.socialLinks,
-    };
-  }
-  return fallbackSiteContent();
 };
 
 module.exports = { getSiteContent };
