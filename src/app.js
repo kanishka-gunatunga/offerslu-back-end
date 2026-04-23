@@ -16,6 +16,25 @@ const { notFoundHandler, errorHandler } = require('./middlewares/error.middlewar
 
 const app = express();
 
+const IMAGE_CONTENT_TYPES = {
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.webp': 'image/webp',
+  '.gif': 'image/gif',
+};
+
+const setUploadHeaders = (res, filePath) => {
+  const ext = path.extname(filePath).toLowerCase();
+  const imageType = IMAGE_CONTENT_TYPES[ext];
+
+  if (imageType) {
+    res.setHeader('Content-Type', imageType);
+  }
+
+  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+};
+
 app.disable('x-powered-by');
 app.set('trust proxy', 1);
 
@@ -49,7 +68,11 @@ app.use(
   '/uploads',
   express.static(path.resolve(process.cwd(), env.upload.dir), {
     fallthrough: false,
-    maxAge: '7d',
+    maxAge: '1y',
+    immutable: true,
+    etag: true,
+    lastModified: true,
+    setHeaders: setUploadHeaders,
   })
 );
 

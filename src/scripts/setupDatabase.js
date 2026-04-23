@@ -2,7 +2,7 @@
 
 const env = require('../config/env');
 const logger = require('../config/logger');
-const { sequelize, User, SiteContent } = require('../models');
+const { sequelize, User } = require('../models');
 
 const ensureIndex = async (queryInterface, tableName, fields, options = {}) => {
   const name = options.name || `${tableName}_${fields.join('_')}_idx`;
@@ -43,22 +43,6 @@ const run = async () => {
         isActive: true,
       });
       logger.info('Created default admin account.');
-    }
-
-    const siteContent = await SiteContent.findOne({ where: { isDefault: true } });
-    if (!siteContent) {
-      await SiteContent.create({
-        siteName: 'Offerlu',
-        hero: {},
-        categories: [],
-        promotionSections: [],
-        promotions: [],
-        banks: [],
-        about: {},
-        socialLinks: [],
-        isDefault: true,
-      });
-      logger.info('Created default site content.');
     }
 
     logger.info('Database setup completed.');

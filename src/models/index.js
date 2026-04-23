@@ -17,7 +17,6 @@ const OfferMerchant = require('./offerMerchant.model')(sequelize);
 const OfferPayment = require('./offerPayment.model')(sequelize);
 const OfferBank = require('./offerBank.model')(sequelize);
 const OfferLocation = require('./offerLocation.model')(sequelize);
-const SiteContent = require('./siteContent.model')(sequelize);
 
 User.hasMany(AdminSession, { foreignKey: 'adminUserId', as: 'sessions' });
 AdminSession.belongsTo(User, { foreignKey: 'adminUserId', as: 'adminUser' });
@@ -129,5 +128,4 @@ module.exports = {
   OfferPayment,
   OfferBank,
   OfferLocation,
-  SiteContent,
 };

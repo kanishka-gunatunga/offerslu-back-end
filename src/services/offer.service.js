@@ -15,7 +15,11 @@ const ApiError = require('../utils/ApiError');
 const env = require('../config/env');
 const { ensureImageSignature } = require('../middlewares/upload.middleware');
 const { saveImage, removeByUrl } = require('./fileStorage.service');
-const { parseIdArrayField, requireNonEmptyArray } = require('../utils/requestParsers');
+const {
+  parseIdArrayField,
+  parseOptionalIdArrayField,
+  hasField,
+} = require('../utils/requestParsers');
 
 const offerIncludes = [
   { model: OfferType, as: 'offerTypes', through: { attributes: [] } },
@@ -85,11 +89,36 @@ const parsePayload = (payload) => {
     paymentIds: parseIdArrayField(payload, 'paymentIds'),
     bankIds: parseIdArrayField(payload, 'bankIds'),
     locationIds: parseIdArrayField(payload, 'locationIds'),
-    companyName: payload.companyName ? String(payload.companyName).trim() : '',
-    companyLogoUrl: payload.companyLogoUrl ? String(payload.companyLogoUrl).trim() : null,
+    companyName: hasField(payload, 'companyName')
+      ? String(payload.companyName || '').trim()
+      : undefined,
+    companyLogoUrl: hasField(payload, 'companyLogoUrl')
+      ? String(payload.companyLogoUrl || '').trim()
+      : undefined,
   };
   return parsed;
 };
+
+const parseUpdatePayload = (payload) => ({
+  title: hasField(payload, 'title') ? String(payload.title || '').trim() : undefined,
+  description: hasField(payload, 'description')
+    ? String(payload.description || '').trim()
+    : undefined,
+  startDate: hasField(payload, 'startDate') ? payload.startDate : undefined,
+  endDate: hasField(payload, 'endDate') ? payload.endDate : undefined,
+  offerTypeIds: parseOptionalIdArrayField(payload, 'offerTypeIds'),
+  categoryIds: parseOptionalIdArrayField(payload, 'categoryIds'),
+  merchantIds: parseOptionalIdArrayField(payload, 'merchantIds'),
+  paymentIds: parseOptionalIdArrayField(payload, 'paymentIds'),
+  bankIds: parseOptionalIdArrayField(payload, 'bankIds'),
+  locationIds: parseOptionalIdArrayField(payload, 'locationIds'),
+  companyName: hasField(payload, 'companyName')
+    ? String(payload.companyName || '').trim()
+    : undefined,
+  companyLogoUrl: hasField(payload, 'companyLogoUrl')
+    ? String(payload.companyLogoUrl || '').trim()
+    : undefined,
+});
 
 const assertCreatePayload = (payload) => {
   if (!payload.title)
@@ -102,24 +131,19 @@ const assertCreatePayload = (payload) => {
     });
   }
   validateDates(payload.startDate, payload.endDate);
-  requireNonEmptyArray(payload.offerTypeIds, 'offerTypeIds');
-  requireNonEmptyArray(payload.categoryIds, 'categoryIds');
-  requireNonEmptyArray(payload.merchantIds, 'merchantIds');
-  requireNonEmptyArray(payload.paymentIds, 'paymentIds');
-  requireNonEmptyArray(payload.bankIds, 'bankIds');
-  requireNonEmptyArray(payload.locationIds, 'locationIds');
 };
 
 const enrichCompanyInfo = async (payload) => {
-  if (payload.companyName) return payload;
+  if (payload.companyName !== undefined && payload.companyName !== '') return payload;
+  if (!Array.isArray(payload.merchantIds) || payload.merchantIds.length === 0) return payload;
 
   const firstMerchant = await Merchant.findByPk(payload.merchantIds[0]);
   if (!firstMerchant) return payload;
 
   return {
     ...payload,
-    companyName: firstMerchant.name,
-    companyLogoUrl: payload.companyLogoUrl || firstMerchant.logoUrl || null,
+    companyName: payload.companyName ?? firstMerchant.name,
+    companyLogoUrl: payload.companyLogoUrl ?? firstMerchant.logoUrl ?? null,
   };
 };
 
@@ -134,14 +158,18 @@ const createOffer = async (rawPayload, file) => {
 
   ensureImageSignature(file, { maxSizeBytes: env.upload.heroImageMaxSizeBytes });
 
-  await Promise.all([
-    assertEntityIds(OfferType, payload.offerTypeIds, 'offerTypeIds'),
-    assertEntityIds(Category, payload.categoryIds, 'categoryIds'),
-    assertEntityIds(Merchant, payload.merchantIds, 'merchantIds'),
-    assertEntityIds(Payment, payload.paymentIds, 'paymentIds'),
-    assertEntityIds(Bank, payload.bankIds, 'bankIds'),
-    assertEntityIds(Location, payload.locationIds, 'locationIds'),
-  ]);
+  await Promise.all(
+    [
+      [OfferType, payload.offerTypeIds, 'offerTypeIds'],
+      [Category, payload.categoryIds, 'categoryIds'],
+      [Merchant, payload.merchantIds, 'merchantIds'],
+      [Payment, payload.paymentIds, 'paymentIds'],
+      [Bank, payload.bankIds, 'bankIds'],
+      [Location, payload.locationIds, 'locationIds'],
+    ]
+      .filter(([, ids]) => ids.length > 0)
+      .map(([Model, ids, fieldName]) => assertEntityIds(Model, ids, fieldName))
+  );
 
   const t = await sequelize.transaction();
   let uploaded = null;
@@ -151,8 +179,8 @@ const createOffer = async (rawPayload, file) => {
       {
         title: payload.title,
         description: payload.description,
-        companyName: payload.companyName,
-        companyLogoUrl: payload.companyLogoUrl,
+        companyName: payload.companyName || '',
+        companyLogoUrl: payload.companyLogoUrl || null,
         startDate: payload.startDate,
         endDate: payload.endDate,
         heroImageUrl: '/uploads/pending',
@@ -186,7 +214,7 @@ const updateOffer = async (id, rawPayload, file) => {
   const offer = await Offer.findByPk(id, { include: offerIncludes });
   if (!offer) throw ApiError.notFound('NOT_FOUND');
 
-  const payload = await enrichCompanyInfo(parsePayload(rawPayload));
+  const payload = await enrichCompanyInfo(parseUpdatePayload(rawPayload));
   if (payload.startDate || payload.endDate) {
     validateDates(payload.startDate || offer.startDate, payload.endDate || offer.endDate);
   }
@@ -196,23 +224,25 @@ const updateOffer = async (id, rawPayload, file) => {
   let previousHeroImageUrl = null;
 
   try {
-    if (payload.offerTypeIds.length)
+    if (payload.offerTypeIds && payload.offerTypeIds.length)
       await assertEntityIds(OfferType, payload.offerTypeIds, 'offerTypeIds');
-    if (payload.categoryIds.length)
+    if (payload.categoryIds && payload.categoryIds.length)
       await assertEntityIds(Category, payload.categoryIds, 'categoryIds');
-    if (payload.merchantIds.length)
+    if (payload.merchantIds && payload.merchantIds.length)
       await assertEntityIds(Merchant, payload.merchantIds, 'merchantIds');
-    if (payload.paymentIds.length) await assertEntityIds(Payment, payload.paymentIds, 'paymentIds');
-    if (payload.bankIds.length) await assertEntityIds(Bank, payload.bankIds, 'bankIds');
-    if (payload.locationIds.length)
+    if (payload.paymentIds && payload.paymentIds.length)
+      await assertEntityIds(Payment, payload.paymentIds, 'paymentIds');
+    if (payload.bankIds && payload.bankIds.length)
+      await assertEntityIds(Bank, payload.bankIds, 'bankIds');
+    if (payload.locationIds && payload.locationIds.length)
       await assertEntityIds(Location, payload.locationIds, 'locationIds');
 
     const updates = {};
-    if (payload.title) updates.title = payload.title;
-    if (payload.description) updates.description = payload.description;
+    if (payload.title !== undefined) updates.title = payload.title;
+    if (payload.description !== undefined) updates.description = payload.description;
     if (payload.startDate) updates.startDate = payload.startDate;
     if (payload.endDate) updates.endDate = payload.endDate;
-    if (payload.companyName) updates.companyName = payload.companyName;
+    if (payload.companyName !== undefined) updates.companyName = payload.companyName;
     if (payload.companyLogoUrl !== undefined) updates.companyLogoUrl = payload.companyLogoUrl;
 
     if (file) {
@@ -226,15 +256,16 @@ const updateOffer = async (id, rawPayload, file) => {
       await offer.update(updates, { transaction: t });
     }
 
-    if (payload.offerTypeIds.length)
+    if (payload.offerTypeIds !== null)
       await offer.setOfferTypes(payload.offerTypeIds, { transaction: t });
-    if (payload.categoryIds.length)
+    if (payload.categoryIds !== null)
       await offer.setCategories(payload.categoryIds, { transaction: t });
-    if (payload.merchantIds.length)
+    if (payload.merchantIds !== null)
       await offer.setMerchants(payload.merchantIds, { transaction: t });
-    if (payload.paymentIds.length) await offer.setPayments(payload.paymentIds, { transaction: t });
-    if (payload.bankIds.length) await offer.setBanks(payload.bankIds, { transaction: t });
-    if (payload.locationIds.length)
+    if (payload.paymentIds !== null)
+      await offer.setPayments(payload.paymentIds, { transaction: t });
+    if (payload.bankIds !== null) await offer.setBanks(payload.bankIds, { transaction: t });
+    if (payload.locationIds !== null)
       await offer.setLocations(payload.locationIds, { transaction: t });
 
     await t.commit();
