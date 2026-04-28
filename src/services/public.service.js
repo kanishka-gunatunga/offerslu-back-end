@@ -21,6 +21,33 @@ const calculateDaysLeft = (startDate, endDate) => {
   return Math.max(0, Math.ceil((endUtc - todayUtc) / DAY_IN_MS));
 };
 
+const mapPromotion = (
+  offer,
+  {
+    descriptionFallback = '',
+    merchantFallback = '',
+    categoryFallback = 'General',
+    offerTypeFallback = 'Promotion',
+    includeOfferDetails = false,
+  } = {}
+) => ({
+  id: offer.id,
+  title: offer.title,
+  description: offer.description || descriptionFallback,
+  ...(includeOfferDetails ? { offerDetails: offer.offerDetails || null } : {}),
+  offerBannerImageUrl: offer.heroImageUrl || null,
+  startDate: offer.startDate,
+  endDate: offer.endDate,
+  merchant: offer.companyName || merchantFallback,
+  category:
+    (offer.categories || [])
+      .filter((item) => item.parentId === null)
+      .map((item) => item.name)
+      .join(', ') || categoryFallback,
+  offerType: (offer.offerTypes || []).map((item) => item.name).join(', ') || offerTypeFallback,
+  daysLeft: calculateDaysLeft(offer.startDate, offer.endDate),
+});
+
 const getSiteContent = async () => {
   const today = new Date().toISOString().slice(0, 10);
 
@@ -96,22 +123,7 @@ const getSiteContent = async () => {
       offerCount: offerCountByCategory[item.id] || 0,
     })),
     promotionSections: [],
-    promotions: promotions.map((offer) => ({
-      id: offer.id,
-      title: offer.title,
-      description: offer.description || '',
-      offerBannerImageUrl: offer.heroImageUrl,
-      startDate: offer.startDate,
-      endDate: offer.endDate,
-      merchant: offer.companyName || '',
-      category:
-        (offer.categories || [])
-          .filter((item) => item.parentId === null)
-          .map((item) => item.name)
-          .join(', ') || 'General',
-      offerType: (offer.offerTypes || []).map((item) => item.name).join(', ') || 'Promotion',
-      daysLeft: calculateDaysLeft(offer.startDate, offer.endDate),
-    })),
+    promotions: promotions.map(mapPromotion),
     banks: banks.map((bank) => ({
       id: bank.id,
       name: bank.name,
@@ -123,4 +135,59 @@ const getSiteContent = async () => {
   };
 };
 
-module.exports = { getSiteContent };
+const getPromotionsByCategory = async (categoryName) => {
+  const today = new Date().toISOString().slice(0, 10);
+
+  const promotions = await Offer.findAll({
+    where: {
+      isInactive: false,
+      endDate: { [Op.gte]: today },
+    },
+    include: [
+      { model: OfferType, as: 'offerTypes', through: { attributes: [] }, attributes: ['name'] },
+      {
+        model: Category,
+        as: 'categories',
+        through: { attributes: [] },
+        attributes: ['name', 'parentId'],
+        where: { name: categoryName },
+        required: true,
+      },
+      { model: Merchant, as: 'merchants', through: { attributes: [] }, attributes: ['name'] },
+    ],
+    order: [['startDate', 'DESC']],
+  });
+
+  return promotions.map(mapPromotion);
+};
+
+const getPromotionById = async (offerId) => {
+  const offer = await Offer.findOne({
+    where: {
+      id: offerId,
+      isInactive: false,
+    },
+    include: [
+      { model: OfferType, as: 'offerTypes', through: { attributes: [] }, attributes: ['name'] },
+      {
+        model: Category,
+        as: 'categories',
+        through: { attributes: [] },
+        attributes: ['name', 'parentId'],
+      },
+      { model: Merchant, as: 'merchants', through: { attributes: [] }, attributes: ['name'] },
+    ],
+  });
+
+  if (!offer) return null;
+
+  return mapPromotion(offer, {
+    descriptionFallback: null,
+    merchantFallback: null,
+    categoryFallback: null,
+    offerTypeFallback: null,
+    includeOfferDetails: true,
+  });
+};
+
+module.exports = { getSiteContent, getPromotionsByCategory, getPromotionById };

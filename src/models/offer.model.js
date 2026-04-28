@@ -22,6 +22,10 @@ module.exports = (sequelize) => {
         allowNull: false,
         validate: { notEmpty: true },
       },
+      offerDetails: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
       heroImageUrl: {
         type: DataTypes.STRING(600),
         allowNull: false,

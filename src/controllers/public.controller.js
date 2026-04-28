@@ -1,6 +1,7 @@
 'use strict';
 
 const asyncHandler = require('../utils/asyncHandler');
+const ApiError = require('../utils/ApiError');
 const publicService = require('../services/public.service');
 
 const siteContent = asyncHandler(async (_req, res) => {
@@ -8,4 +9,28 @@ const siteContent = asyncHandler(async (_req, res) => {
   return res.status(200).json(payload);
 });
 
-module.exports = { siteContent };
+const promotionsByCategory = asyncHandler(async (req, res) => {
+  const category = req.query.category?.trim();
+  if (!category) {
+    throw ApiError.badRequest('Query parameter "category" is required');
+  }
+
+  const promotions = await publicService.getPromotionsByCategory(category);
+  return res.status(200).json({ promotions });
+});
+
+const promotionById = asyncHandler(async (req, res) => {
+  const id = req.params.id?.trim();
+  if (!id) {
+    throw ApiError.badRequest('Path parameter "id" is required');
+  }
+
+  const promotion = await publicService.getPromotionById(id);
+  if (!promotion) {
+    throw ApiError.notFound('Promotion not found');
+  }
+
+  return res.status(200).json({ promotion });
+});
+
+module.exports = { siteContent, promotionsByCategory, promotionById };

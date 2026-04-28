@@ -39,6 +39,7 @@ const toAdminOffer = (offerInstance) => {
     companyLogoUrl: offer.companyLogoUrl || '',
     heroImageUrl: offer.heroImageUrl,
     description: offer.description,
+    offerDetails: offer.offerDetails,
     category: (offer.categories || []).map((item) => item.name).join(', '),
     offerType: (offer.offerTypes || []).map((item) => item.name).join(', '),
     startDate: offer.startDate,
@@ -51,6 +52,12 @@ const toAdminOffer = (offerInstance) => {
     locationIds: (offer.locations || []).map((item) => item.id),
     isInactive: offer.isInactive,
   };
+};
+
+const parseOptionalTextField = (payload, key) => {
+  if (!hasField(payload, key)) return undefined;
+  const normalized = String(payload[key] || '').trim();
+  return normalized || null;
 };
 
 const assertEntityIds = async (Model, ids, fieldName) => {
@@ -81,6 +88,7 @@ const parsePayload = (payload) => {
   const parsed = {
     title: (payload.title || '').trim(),
     description: (payload.description || '').trim(),
+    offerDetails: parseOptionalTextField(payload, 'offerDetails'),
     startDate: payload.startDate,
     endDate: payload.endDate,
     offerTypeIds: parseIdArrayField(payload, 'offerTypeIds'),
@@ -104,6 +112,7 @@ const parseUpdatePayload = (payload) => ({
   description: hasField(payload, 'description')
     ? String(payload.description || '').trim()
     : undefined,
+  offerDetails: parseOptionalTextField(payload, 'offerDetails'),
   startDate: hasField(payload, 'startDate') ? payload.startDate : undefined,
   endDate: hasField(payload, 'endDate') ? payload.endDate : undefined,
   offerTypeIds: parseOptionalIdArrayField(payload, 'offerTypeIds'),
@@ -179,6 +188,7 @@ const createOffer = async (rawPayload, file) => {
       {
         title: payload.title,
         description: payload.description,
+        offerDetails: payload.offerDetails,
         companyName: payload.companyName || '',
         companyLogoUrl: payload.companyLogoUrl || null,
         startDate: payload.startDate,
@@ -240,6 +250,7 @@ const updateOffer = async (id, rawPayload, file) => {
     const updates = {};
     if (payload.title !== undefined) updates.title = payload.title;
     if (payload.description !== undefined) updates.description = payload.description;
+    if (payload.offerDetails !== undefined) updates.offerDetails = payload.offerDetails;
     if (payload.startDate) updates.startDate = payload.startDate;
     if (payload.endDate) updates.endDate = payload.endDate;
     if (payload.companyName !== undefined) updates.companyName = payload.companyName;
