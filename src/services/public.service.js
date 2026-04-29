@@ -1,7 +1,16 @@
 'use strict';
 
 const { Op, QueryTypes } = require('sequelize');
-const { sequelize, Category, Bank, Offer, OfferType, Merchant } = require('../models');
+const {
+  sequelize,
+  Category,
+  Bank,
+  Offer,
+  OfferType,
+  Merchant,
+  Payment,
+  Location,
+} = require('../models');
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
@@ -21,6 +30,42 @@ const calculateDaysLeft = (startDate, endDate) => {
   return Math.max(0, Math.ceil((endUtc - todayUtc) / DAY_IN_MS));
 };
 
+const normalizeTag = (value) => String(value || '').trim();
+
+const uniqueCaseInsensitive = (values) => {
+  const seen = new Set();
+  const uniqueValues = [];
+
+  values.forEach((value) => {
+    const normalized = normalizeTag(value);
+    if (!normalized) return;
+
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    uniqueValues.push(normalized);
+  });
+
+  return uniqueValues;
+};
+
+const getNamedWithParents = (items = []) =>
+  uniqueCaseInsensitive([
+    ...items.map((item) => item?.parent?.name),
+    ...items.map((item) => item?.name),
+  ]);
+
+const buildRelatedTags = (offer) =>
+  uniqueCaseInsensitive([
+    ...(offer.banks || []).map((item) => item?.name),
+    ...(offer.locations || []).map((item) => item?.name),
+    ...getNamedWithParents(offer.categories || []),
+    ...getNamedWithParents(offer.offerTypes || []),
+    ...getNamedWithParents(offer.payments || []),
+    ...(offer.merchants || []).map((item) => item?.name),
+    offer.companyName,
+  ]);
+
 const mapPromotion = (
   offer,
   {
@@ -29,6 +74,7 @@ const mapPromotion = (
     categoryFallback = 'General',
     offerTypeFallback = 'Promotion',
     includeOfferDetails = false,
+    includeRelatedTags = false,
   } = {}
 ) => ({
   id: offer.id,
@@ -45,6 +91,7 @@ const mapPromotion = (
       .map((item) => item.name)
       .join(', ') || categoryFallback,
   offerType: (offer.offerTypes || []).map((item) => item.name).join(', ') || offerTypeFallback,
+  ...(includeRelatedTags ? { relatedTags: buildRelatedTags(offer) } : {}),
   daysLeft: calculateDaysLeft(offer.startDate, offer.endDate),
 });
 
@@ -168,13 +215,29 @@ const getPromotionById = async (offerId) => {
       isInactive: false,
     },
     include: [
-      { model: OfferType, as: 'offerTypes', through: { attributes: [] }, attributes: ['name'] },
+      {
+        model: OfferType,
+        as: 'offerTypes',
+        through: { attributes: [] },
+        attributes: ['name', 'parentId'],
+        include: [{ model: OfferType, as: 'parent', attributes: ['name'] }],
+      },
       {
         model: Category,
         as: 'categories',
         through: { attributes: [] },
         attributes: ['name', 'parentId'],
+        include: [{ model: Category, as: 'parent', attributes: ['name'] }],
       },
+      {
+        model: Payment,
+        as: 'payments',
+        through: { attributes: [] },
+        attributes: ['name', 'parentId'],
+        include: [{ model: Payment, as: 'parent', attributes: ['name'] }],
+      },
+      { model: Bank, as: 'banks', through: { attributes: [] }, attributes: ['name'] },
+      { model: Location, as: 'locations', through: { attributes: [] }, attributes: ['name'] },
       { model: Merchant, as: 'merchants', through: { attributes: [] }, attributes: ['name'] },
     ],
   });
@@ -187,6 +250,7 @@ const getPromotionById = async (offerId) => {
     categoryFallback: null,
     offerTypeFallback: null,
     includeOfferDetails: true,
+    includeRelatedTags: true,
   });
 };
 
