@@ -9,6 +9,16 @@ const siteContent = asyncHandler(async (_req, res) => {
   return res.status(200).json(payload);
 });
 
+const promotionSearchFilters = asyncHandler(async (_req, res) => {
+  const payload = await publicService.getPromotionSearchFilters();
+  return res.status(200).json(payload);
+});
+
+const searchPromotions = asyncHandler(async (req, res) => {
+  const promotions = await publicService.searchPromotions(req.query || {});
+  return res.status(200).json({ promotions });
+});
+
 const promotionsByCategory = asyncHandler(async (req, res) => {
   const category = req.query.category?.trim();
   if (!category) {
@@ -33,4 +43,10 @@ const promotionById = asyncHandler(async (req, res) => {
   return res.status(200).json({ promotion });
 });
 
-module.exports = { siteContent, promotionsByCategory, promotionById };
+module.exports = {
+  siteContent,
+  promotionSearchFilters,
+  searchPromotions,
+  promotionsByCategory,
+  promotionById,
+};

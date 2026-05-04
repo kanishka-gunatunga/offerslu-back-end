@@ -66,6 +66,21 @@ const buildRelatedTags = (offer) =>
     offer.companyName,
   ]);
 
+const parseCsvNames = (value) => {
+  if (value === undefined || value === null) return [];
+  return uniqueCaseInsensitive(String(value).split(','));
+};
+
+const toLowerSet = (values) => uniqueCaseInsensitive(values).map((item) => item.toLowerCase());
+
+const buildNameFilter = (associationAlias, namesLower) =>
+  sequelize.where(sequelize.fn('LOWER', sequelize.col(`${associationAlias}.name`)), {
+    [Op.in]: namesLower,
+  });
+
+const buildTextLike = (columnPath, qLike) =>
+  sequelize.where(sequelize.fn('LOWER', sequelize.col(columnPath)), { [Op.like]: qLike });
+
 const mapPromotion = (
   offer,
   {
@@ -94,6 +109,120 @@ const mapPromotion = (
   ...(includeRelatedTags ? { relatedTags: buildRelatedTags(offer) } : {}),
   daysLeft: calculateDaysLeft(offer.startDate, offer.endDate),
 });
+
+const getPromotionSearchFilters = async () => {
+  const [categories, offerTypes, paymentTypes, banks] = await Promise.all([
+    Category.findAll({
+      where: { status: 'active', parentId: null },
+      attributes: ['name'],
+      order: [['name', 'ASC']],
+    }),
+    OfferType.findAll({
+      where: { status: 'active' },
+      attributes: ['name'],
+      order: [['name', 'ASC']],
+    }),
+    Payment.findAll({
+      where: { status: 'active' },
+      attributes: ['name'],
+      order: [['name', 'ASC']],
+    }),
+    Bank.findAll({
+      where: { status: 'active' },
+      attributes: ['name'],
+      order: [['name', 'ASC']],
+    }),
+  ]);
+
+  return {
+    filters: {
+      categories: uniqueCaseInsensitive(categories.map((item) => item.name)),
+      offerTypes: uniqueCaseInsensitive(offerTypes.map((item) => item.name)),
+      paymentTypes: uniqueCaseInsensitive(paymentTypes.map((item) => item.name)),
+      banks: uniqueCaseInsensitive(banks.map((item) => item.name)),
+    },
+  };
+};
+
+const searchPromotions = async (query = {}) => {
+  const today = new Date().toISOString().slice(0, 10);
+  const q = normalizeTag(query.q);
+  const categoryNamesLower = toLowerSet(parseCsvNames(query.categories));
+  const offerTypeNamesLower = toLowerSet(parseCsvNames(query.offerTypes));
+  const paymentTypeNamesLower = toLowerSet(parseCsvNames(query.paymentTypes));
+  const bankNamesLower = toLowerSet(parseCsvNames(query.banks));
+
+  const include = [
+    {
+      model: OfferType,
+      as: 'offerTypes',
+      through: { attributes: [] },
+      attributes: ['name'],
+      required: offerTypeNamesLower.length > 0,
+      ...(offerTypeNamesLower.length > 0
+        ? { where: buildNameFilter('offerTypes', offerTypeNamesLower) }
+        : {}),
+    },
+    {
+      model: Category,
+      as: 'categories',
+      through: { attributes: [] },
+      attributes: ['name', 'parentId'],
+      required: categoryNamesLower.length > 0,
+      ...(categoryNamesLower.length > 0
+        ? { where: buildNameFilter('categories', categoryNamesLower) }
+        : {}),
+    },
+    {
+      model: Payment,
+      as: 'payments',
+      through: { attributes: [] },
+      attributes: ['name'],
+      required: paymentTypeNamesLower.length > 0,
+      ...(paymentTypeNamesLower.length > 0
+        ? { where: buildNameFilter('payments', paymentTypeNamesLower) }
+        : {}),
+    },
+    {
+      model: Bank,
+      as: 'banks',
+      through: { attributes: [] },
+      attributes: ['name'],
+      required: bankNamesLower.length > 0,
+      ...(bankNamesLower.length > 0 ? { where: buildNameFilter('banks', bankNamesLower) } : {}),
+    },
+    { model: Merchant, as: 'merchants', through: { attributes: [] }, attributes: ['name'] },
+  ];
+
+  const where = {
+    isInactive: false,
+    endDate: { [Op.gte]: today },
+  };
+
+  if (q) {
+    const qLike = `%${q.toLowerCase()}%`;
+    where[Op.or] = [
+      buildTextLike('Offer.title', qLike),
+      buildTextLike('Offer.description', qLike),
+      buildTextLike('Offer.company_name', qLike),
+      buildTextLike('categories.name', qLike),
+      buildTextLike('offerTypes.name', qLike),
+      buildTextLike('payments.name', qLike),
+      buildTextLike('banks.name', qLike),
+      buildTextLike('merchants.name', qLike),
+    ];
+  }
+
+  const promotions = await Offer.findAll({
+    where,
+    include,
+    order: [['startDate', 'DESC']],
+    distinct: true,
+    subQuery: false,
+  });
+
+  return promotions.map(mapPromotion);
+};
 
 const getSiteContent = async () => {
   const today = new Date().toISOString().slice(0, 10);
@@ -254,4 +383,10 @@ const getPromotionById = async (offerId) => {
   });
 };
 
-module.exports = { getSiteContent, getPromotionsByCategory, getPromotionById };
+module.exports = {
+  getSiteContent,
+  getPromotionsByCategory,
+  getPromotionById,
+  getPromotionSearchFilters,
+  searchPromotions,
+};
