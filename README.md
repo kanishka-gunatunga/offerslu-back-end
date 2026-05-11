@@ -30,7 +30,7 @@ npm install
 cp .env.example .env
 ```
 
-3. Configure `.env` (`DB_*`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `API_PREFIX`).
+3. Configure `.env` (`DB_*`, `API_PREFIX`, CORS, and admin session settings).
 
 4. Recreate DB schema (destructive):
 
@@ -97,8 +97,9 @@ Returns:
 
 - `npm run dev` - start development server
 - `npm start` - start production server
-- `npm run db:setup` - recreate schema and seed default admin/site content
-- `npm run db:seed` - seed/reset admin account only
+- `npm run db:setup -- --force` - recreate schema (destructive)
+- `npm run db:seed -- --email=<admin@email> --password=<password>` - create admin account
+- `npm run db:seed -- --email=<admin@email> --password=<password> --reset-password` - reset admin password
 - `npm run lint` - run eslint
 - `npm run format` - run prettier
 

@@ -1,8 +1,7 @@
 'use strict';
 
-const env = require('../config/env');
 const logger = require('../config/logger');
-const { sequelize, User } = require('../models');
+const { sequelize } = require('../models');
 
 const ensureIndex = async (queryInterface, tableName, fields, options = {}) => {
   const name = options.name || `${tableName}_${fields.join('_')}_idx`;
@@ -34,16 +33,6 @@ const run = async () => {
       type: 'FULLTEXT',
       name: 'offers_text_search_idx',
     });
-
-    const admin = await User.findOne({ where: { email: env.admin.email } });
-    if (!admin) {
-      await User.create({
-        email: env.admin.email,
-        passwordHash: env.admin.password,
-        isActive: true,
-      });
-      logger.info('Created default admin account.');
-    }
 
     logger.info('Database setup completed.');
     await sequelize.close();

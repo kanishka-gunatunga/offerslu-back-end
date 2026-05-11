@@ -19,8 +19,6 @@ const envSchema = Joi.object({
   DB_DIALECT: Joi.string().valid('mysql').default('mysql'),
   DB_LOGGING: Joi.boolean().default(false),
 
-  ADMIN_EMAIL: Joi.string().email().default('admin@offerlu.local'),
-  ADMIN_PASSWORD: Joi.string().min(6).default('admin123'),
   ADMIN_SESSION_TTL_SECONDS: Joi.number().default(60 * 60 * 24 * 7),
   ADMIN_COOKIE_NAME: Joi.string().default('offerlu_admin_session'),
 
@@ -62,8 +60,6 @@ module.exports = {
   },
 
   admin: {
-    email: env.ADMIN_EMAIL,
-    password: env.ADMIN_PASSWORD,
     sessionTtlSeconds: env.ADMIN_SESSION_TTL_SECONDS,
     cookieName: env.ADMIN_COOKIE_NAME,
   },

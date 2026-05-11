@@ -17,7 +17,10 @@ const sessionCookieOptions = {
 };
 
 const login = async ({ password }) => {
-  const user = await User.findOne({ where: { email: env.admin.email, isActive: true } });
+  const user = await User.findOne({
+    where: { isActive: true },
+    order: [['createdAt', 'ASC']],
+  });
   if (!user || !user.isActive) {
     throw ApiError.unauthorized('INVALID_CREDENTIALS');
   }
