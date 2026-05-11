@@ -58,11 +58,18 @@ app.use(
   })
 );
 
+const apiPrefixNorm = env.apiPrefix.replace(/\/$/, '') || env.apiPrefix;
+const publicReadPathPrefix = `${apiPrefixNorm}/public`;
+
 const globalLimiter = rateLimit({
   windowMs: env.rateLimit.windowMs,
   max: env.rateLimit.max,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) =>
+    req.method === 'GET' &&
+    typeof req.path === 'string' &&
+    req.path.startsWith(publicReadPathPrefix),
 });
 app.use(globalLimiter);
 
