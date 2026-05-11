@@ -1,5 +1,6 @@
 'use strict';
 
+const mysql2 = require('mysql2');
 const { Sequelize } = require('sequelize');
 const env = require('./env');
 const logger = require('./logger');
@@ -8,6 +9,7 @@ const sequelize = new Sequelize(env.db.name, env.db.user, env.db.password, {
   host: env.db.host,
   port: env.db.port,
   dialect: env.db.dialect,
+  dialectModule: mysql2,
   logging: env.db.logging ? (msg) => logger.debug(msg) : false,
   pool: {
     max: 10,
