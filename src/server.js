@@ -1,16 +1,43 @@
 'use strict';
 
-const app = require('./app');
+/**
+ * Local: `node src/server.js` → connects DB and listens on PORT.
+ * Vercel: this file is the serverless entry; it must export an Express app.
+ * @see https://vercel.com/docs/frameworks/backend/express
+ */
+
+require('./models');
+
+const express = require('express');
+const baseApp = require('./app');
 const env = require('./config/env');
 const logger = require('./config/logger');
 const { sequelize, connectDatabase } = require('./config/database');
-require('./models');
+
+let dbPromise = null;
+const ensureDatabase = () => {
+  if (!dbPromise) {
+    dbPromise = connectDatabase();
+  }
+  return dbPromise;
+};
+
+const app = express();
+app.use(async (req, res, next) => {
+  try {
+    await ensureDatabase();
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
+app.use(baseApp);
 
 let server;
 
 const startServer = async () => {
   try {
-    await connectDatabase();
+    await ensureDatabase();
 
     server = app.listen(env.port, () => {
       logger.info(`Server running in ${env.nodeEnv} mode on port ${env.port}`);
@@ -44,15 +71,19 @@ const shutdown = async (signal) => {
   }
 };
 
-process.on('unhandledRejection', (reason) => {
-  logger.error(`Unhandled Rejection: ${reason instanceof Error ? reason.stack : reason}`);
-});
+if (require.main === module) {
+  process.on('unhandledRejection', (reason) => {
+    logger.error(`Unhandled Rejection: ${reason instanceof Error ? reason.stack : reason}`);
+  });
 
-process.on('uncaughtException', (err) => {
-  logger.error(`Uncaught Exception: ${err.stack || err.message}`);
-  shutdown('uncaughtException');
-});
+  process.on('uncaughtException', (err) => {
+    logger.error(`Uncaught Exception: ${err.stack || err.message}`);
+    shutdown('uncaughtException');
+  });
 
-['SIGINT', 'SIGTERM'].forEach((sig) => process.on(sig, () => shutdown(sig)));
+  ['SIGINT', 'SIGTERM'].forEach((sig) => process.on(sig, () => shutdown(sig)));
 
-startServer();
+  startServer();
+}
+
+module.exports = app;

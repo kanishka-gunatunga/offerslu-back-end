@@ -36,7 +36,7 @@ const setUploadHeaders = (res, filePath) => {
 };
 
 app.disable('x-powered-by');
-app.set('trust proxy', 1);
+app.set('trust proxy', process.env.VERCEL === '1' ? true : 1);
 
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(

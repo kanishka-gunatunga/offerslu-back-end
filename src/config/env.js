@@ -1,8 +1,12 @@
 'use strict';
 
 const path = require('path');
+const os = require('os');
 const dotenv = require('dotenv');
 const Joi = require('joi');
+
+const defaultUploadDir =
+  process.env.VERCEL === '1' ? path.join(os.tmpdir(), 'offerslu-uploads') : 'uploads';
 
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
@@ -29,7 +33,7 @@ const envSchema = Joi.object({
   RATE_LIMIT_MAX: Joi.number().default(300),
   LOGIN_RATE_LIMIT_MAX: Joi.number().default(10),
 
-  UPLOAD_DIR: Joi.string().default('uploads'),
+  UPLOAD_DIR: Joi.string().default(defaultUploadDir),
   MAX_UPLOAD_SIZE_MB: Joi.number().default(10),
   HERO_IMAGE_MAX_SIZE_MB: Joi.number().default(5),
 
