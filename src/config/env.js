@@ -5,6 +5,10 @@ const os = require('os');
 const dotenv = require('dotenv');
 const Joi = require('joi');
 
+/**
+ * Writable root for new uploads. On Vercel the deploy tree is read-only, so defaults to /tmp/...
+ * Committed images in ./uploads are still served (see app.js read order).
+ */
 const defaultUploadDir =
   process.env.VERCEL === '1' ? path.join(os.tmpdir(), 'offerslu-uploads') : 'uploads';
 
@@ -38,6 +42,9 @@ const envSchema = Joi.object({
   HERO_IMAGE_MAX_SIZE_MB: Joi.number().default(5),
 
   LOG_LEVEL: Joi.string().valid('error', 'warn', 'info', 'http', 'debug').default('info'),
+
+  /** Optional. Full origin of this API (e.g. https://api-xx.vercel.app) so image URLs work from a separate frontend host. */
+  PUBLIC_ASSET_BASE_URL: Joi.string().trim().allow('').default(''),
 }).unknown(true);
 
 const { value: env, error } = envSchema.validate(process.env, { abortEarly: false });
@@ -81,9 +88,15 @@ module.exports = {
 
   upload: {
     dir: env.UPLOAD_DIR,
+    /** Where multer/fs writes new files (tmp on Vercel, ./uploads locally). */
+    writeRoot: path.resolve(process.cwd(), env.UPLOAD_DIR),
+    /** Bundled repo folder (read-only on Vercel); used to serve images shipped with git. */
+    bundleRoot: path.resolve(process.cwd(), 'uploads'),
     maxSizeBytes: env.MAX_UPLOAD_SIZE_MB * 1024 * 1024,
     heroImageMaxSizeBytes: env.HERO_IMAGE_MAX_SIZE_MB * 1024 * 1024,
   },
 
   logLevel: env.LOG_LEVEL,
+
+  publicAssetBaseUrl: env.PUBLIC_ASSET_BASE_URL || '',
 };

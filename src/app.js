@@ -1,6 +1,8 @@
 'use strict';
 
+const fs = require('fs');
 const path = require('path');
+const { URL } = require('node:url');
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
@@ -64,17 +66,74 @@ const globalLimiter = rateLimit({
 });
 app.use(globalLimiter);
 
-app.use(
-  '/uploads',
-  express.static(path.resolve(process.cwd(), env.upload.dir), {
-    fallthrough: false,
-    maxAge: '1y',
-    immutable: true,
-    etag: true,
-    lastModified: true,
-    setHeaders: setUploadHeaders,
-  })
-);
+const uploadWriteRootResolved = env.upload.writeRoot;
+
+const resolveSafeUploadPath = (root, safe) => {
+  const resolvedRoot = path.resolve(root);
+  const resolvedFile = path.resolve(path.join(resolvedRoot, safe));
+  const rel = path.relative(resolvedRoot, resolvedFile);
+  if (rel.startsWith('..') || path.isAbsolute(rel)) {
+    return null;
+  }
+  return resolvedFile;
+};
+
+/** Vercel does not serve express.static from the function bundle; stream files explicitly. */
+const serveUploadFromDisk = (req, res, next) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    return next();
+  }
+
+  let pathname;
+  try {
+    pathname = new URL(req.originalUrl, `http://${req.headers.host || 'localhost'}`).pathname;
+  } catch {
+    return next();
+  }
+
+  if (!pathname.startsWith('/uploads/')) {
+    return next();
+  }
+
+  const subPath = pathname.slice('/uploads/'.length);
+  const safe = path.normalize(subPath).replace(/^(\.\.(\/|\\|$))+/, '');
+
+  const tryFile = (root, then) => {
+    const resolvedFile = resolveSafeUploadPath(root, safe);
+    if (!resolvedFile) {
+      return then();
+    }
+    fs.stat(resolvedFile, (err, st) => {
+      if (!err && st.isFile()) {
+        setUploadHeaders(res, resolvedFile);
+        return res.sendFile(resolvedFile, (sendErr) => {
+          if (sendErr) next(sendErr);
+        });
+      }
+      then();
+    });
+  };
+
+  tryFile(env.upload.bundleRoot, () => {
+    tryFile(env.upload.writeRoot, () => next());
+  });
+};
+
+if (process.env.VERCEL === '1') {
+  app.use('/uploads', serveUploadFromDisk);
+} else {
+  app.use(
+    '/uploads',
+    express.static(uploadWriteRootResolved, {
+      fallthrough: false,
+      maxAge: '1y',
+      immutable: true,
+      etag: true,
+      lastModified: true,
+      setHeaders: setUploadHeaders,
+    })
+  );
+}
 
 app.use(env.apiPrefix, routes);
 

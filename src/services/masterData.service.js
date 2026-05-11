@@ -4,6 +4,15 @@ const { OfferType, Category, Merchant, Payment, Bank, Location } = require('../m
 const ApiError = require('../utils/ApiError');
 const { ensureImageSignature } = require('../middlewares/upload.middleware');
 const { saveImage, removeByUrl } = require('./fileStorage.service');
+const { toAbsoluteAssetUrl } = require('../utils/assetUrl');
+
+const withMasterAssetUrls = (row) => {
+  if (!row || typeof row !== 'object') return row;
+  const out = { ...row };
+  if (out.bannerImageUrl) out.bannerImageUrl = toAbsoluteAssetUrl(out.bannerImageUrl);
+  if (out.logoUrl) out.logoUrl = toAbsoluteAssetUrl(out.logoUrl);
+  return out;
+};
 
 const CONFIG = {
   'offer-types': { model: OfferType, imageField: null, imageColumn: null, storageDir: null },
@@ -37,7 +46,7 @@ const list = async (entity, query) => {
   if (query.parentId !== undefined) where.parentId = query.parentId || null;
 
   const rows = await model.findAll({ where, order: [['name', 'ASC']] });
-  return rows.map((item) => item.toJSON());
+  return rows.map((item) => withMasterAssetUrls(item.toJSON()));
 };
 
 const create = async (entity, payload, file) => {
@@ -64,7 +73,7 @@ const create = async (entity, payload, file) => {
       }
     }
 
-    return created.toJSON();
+    return withMasterAssetUrls(created.toJSON());
   } catch (err) {
     if (uploaded?.relativeUrl) await removeByUrl(uploaded.relativeUrl);
     throw err;
@@ -95,7 +104,7 @@ const update = async (entity, id, payload, file) => {
       await removeByUrl(previousImage);
     }
 
-    return item.toJSON();
+    return withMasterAssetUrls(item.toJSON());
   } catch (err) {
     if (uploaded?.relativeUrl) await removeByUrl(uploaded.relativeUrl);
     throw err;

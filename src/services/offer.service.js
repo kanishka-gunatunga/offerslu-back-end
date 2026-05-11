@@ -20,6 +20,7 @@ const {
   parseOptionalIdArrayField,
   hasField,
 } = require('../utils/requestParsers');
+const { toAbsoluteAssetUrl } = require('../utils/assetUrl');
 
 const offerIncludes = [
   { model: OfferType, as: 'offerTypes', through: { attributes: [] } },
@@ -36,8 +37,8 @@ const toAdminOffer = (offerInstance) => {
     id: offer.id,
     title: offer.title,
     companyName: offer.companyName,
-    companyLogoUrl: offer.companyLogoUrl || '',
-    heroImageUrl: offer.heroImageUrl,
+    companyLogoUrl: toAbsoluteAssetUrl(offer.companyLogoUrl || '') || '',
+    heroImageUrl: toAbsoluteAssetUrl(offer.heroImageUrl),
     description: offer.description,
     offerDetails: offer.offerDetails,
     category: (offer.categories || []).map((item) => item.name).join(', '),

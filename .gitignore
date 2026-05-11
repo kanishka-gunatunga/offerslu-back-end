@@ -19,9 +19,7 @@ coverage/
 logs/
 *.log
 
-# Uploads (keep directory, ignore contents)
-uploads/*
-!uploads/.gitkeep
+# Uploads: tracked in git for now (deploy with repo). Remove these lines and use object storage when you migrate.
 
 # Editor/OS
 .vscode/

@@ -81,6 +81,8 @@ const buildNameFilter = (associationAlias, namesLower) =>
 const buildTextLike = (columnPath, qLike) =>
   sequelize.where(sequelize.fn('LOWER', sequelize.col(columnPath)), { [Op.like]: qLike });
 
+const { toAbsoluteAssetUrl } = require('../utils/assetUrl');
+
 const mapPromotion = (
   offer,
   {
@@ -96,7 +98,7 @@ const mapPromotion = (
   title: offer.title,
   description: offer.description || descriptionFallback,
   ...(includeOfferDetails ? { offerDetails: offer.offerDetails || null } : {}),
-  offerBannerImageUrl: offer.heroImageUrl || null,
+  offerBannerImageUrl: toAbsoluteAssetUrl(offer.heroImageUrl || null),
   startDate: offer.startDate,
   endDate: offer.endDate,
   merchant: offer.companyName || merchantFallback,
@@ -295,7 +297,7 @@ const getSiteContent = async () => {
     categories: categories.map((item) => ({
       id: item.id,
       name: item.name,
-      bannerImageUrl: item.bannerImageUrl,
+      bannerImageUrl: toAbsoluteAssetUrl(item.bannerImageUrl),
       offerCount: offerCountByCategory[item.id] || 0,
     })),
     promotionSections: [],
@@ -303,7 +305,7 @@ const getSiteContent = async () => {
     banks: banks.map((bank) => ({
       id: bank.id,
       name: bank.name,
-      logoUrl: bank.logoUrl,
+      logoUrl: toAbsoluteAssetUrl(bank.logoUrl),
       offerCount: offerCountByBank[bank.id] || 0,
     })),
     about: {},
