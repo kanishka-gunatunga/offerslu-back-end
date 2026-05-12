@@ -60,18 +60,32 @@ const json429Handler = (logEvent) => (req, res, _next, options) => {
 };
 
 /**
- * Cheap read paths that should not share the global bucket with SSR-heavy traffic.
- * Keys: same as express-rate-limit default — **per IP** (see README).
+ * Requests that should not consume the global rate-limit bucket.
+ * - Public + health + uploads (already cheap / SSR-heavy elsewhere).
+ * - All **GET/HEAD** under `/admin/**`: the admin UI loads many master-data and offer
+ *   endpoints in parallel; sharing one IP (and counting preflights) could otherwise return 429.
+ *   Clients often treat failed session or list calls as “logged out” or empty screens.
+ * - **OPTIONS** (CORS preflight): should not burn the budget for actual API calls.
+ *
+ * Keys: default store is **per IP** after `trust proxy`.
+ *
  * @param {string} apiPrefixNorm e.g. /api or /api/v1
  */
-const skipGlobalLimiterForPublicReads = (apiPrefixNorm) => (req) => {
+const skipGlobalLimiter = (apiPrefixNorm) => (req) => {
+  if (req.method === 'OPTIONS') return true;
+
   if (req.method !== 'GET' && req.method !== 'HEAD') return false;
+
   const p = requestPathname(req);
   const publicPrefix = `${apiPrefixNorm}/public`;
   const healthPath = `${apiPrefixNorm}/health`;
+  const adminPrefix = `${apiPrefixNorm}/admin`;
+
   if (p === healthPath) return true;
   if (p.startsWith(`${publicPrefix}/`) || p === publicPrefix) return true;
   if (p.startsWith('/uploads/')) return true;
+  if (p === adminPrefix || p.startsWith(`${adminPrefix}/`)) return true;
+
   return false;
 };
 
@@ -82,7 +96,7 @@ const createGlobalLimiter = (env) => {
     max: env.rateLimit.max,
     standardHeaders: true,
     legacyHeaders: false,
-    skip: skipGlobalLimiterForPublicReads(apiPrefixNorm),
+    skip: skipGlobalLimiter(apiPrefixNorm),
     handler: json429Handler('rate_limit_429'),
   });
 };

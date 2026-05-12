@@ -142,6 +142,8 @@ Errors from this API use the standard JSON error shape from `error.middleware` (
 
 1. **Global limit** (`RATE_LIMIT_MAX` per `RATE_LIMIT_WINDOW_MS`, default **3000 / 15 minutes**) applies to routes that are **not** exempted below.
 2. **Exempt from the global limiter** (no consumption of the global bucket):
+   - `OPTIONS` (CORS preflight).
+   - `GET`/`HEAD` `${API_PREFIX}/admin` and everything under it (session checks, master-data lists, offer lists, etc.). The admin UI issues **many parallel reads**; counting them toward the same cap as other traffic caused **429** responses that some clients treat like **auth failure** (empty dropdowns, “logged out” after refresh).
    - `GET`/`HEAD` `${API_PREFIX}/public` and everything under it (all public read endpoints above).
    - `GET`/`HEAD` `${API_PREFIX}/health`.
    - `GET`/`HEAD` `/uploads/...` (static images).
@@ -160,7 +162,7 @@ Errors from this API use the standard JSON error shape from `error.middleware` (
 | `RATE_LIMIT_ADMIN_WRITE_WINDOW_MS` | `900000` | Window for admin write limiter |
 | `LOGIN_RATE_LIMIT_MAX` | `10` | Login attempts per window |
 
-Tune `RATE_LIMIT_MAX` upward in production if needed; public `GET /public/*` traffic should not drive global usage anymore.
+Tune `RATE_LIMIT_MAX` upward in production if needed; public and admin read traffic no longer consume the global bucket for the paths above.
 
 ## Scripts
 

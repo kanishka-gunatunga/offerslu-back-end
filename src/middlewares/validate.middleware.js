@@ -33,7 +33,15 @@ const validate = (schema) => (req, _res, next) => {
     return next(ApiError.badRequest('Validation failed', { fields: details }));
   }
 
-  Object.assign(req, value);
+  if (value.params && typeof value.params === 'object') {
+    Object.assign(req.params, value.params);
+  }
+  if (value.query && typeof value.query === 'object') {
+    Object.assign(req.query, value.query);
+  }
+  if (Object.prototype.hasOwnProperty.call(value, 'body')) {
+    req.body = value.body;
+  }
   return next();
 };
 
