@@ -78,7 +78,7 @@ Endpoints:
 
 **Limits:** Multer rejects any single file over `MAX_UPLOAD_SIZE_MB` (default 10 MB). After upload, hero and company logo are validated again to `HERO_IMAGE_MAX_SIZE_MB` (default 5 MB) and must be JPEG/PNG/WebP/GIF with a matching binary signature. Bodies are still subject to the Express urlencoded/json limits for non-file parts.
 
-**Vercel:** Files are written under `UPLOAD_DIR` (defaults to `/tmp/...` on Vercel); this is **ephemeral** serverless storage unless you add external object storage (S3, etc.).
+**Vercel:** The deploy tree (`/var/task`) is **read-only**. If `UPLOAD_DIR` resolves under the project or `/var/task`, the server **automatically writes new uploads under** `os.tmpdir()/offerslu-uploads` instead (so `mkdir` does not fail). That storage is **ephemeral** (and a different path per invocation); use **S3 / Vercel Blob / Cloudinary** for production-persistent images. Set `PUBLIC_ASSET_BASE_URL` so `/uploads/...` URLs resolve to this API host.
 
 Dashboard list query params:
 `q`, `status`, `category`, `offerType`, `merchant`, `bank`, `location`, `sort`, `page`, `pageSize`.

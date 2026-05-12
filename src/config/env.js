@@ -9,10 +9,15 @@ const Joi = require('joi');
  * Writable root for new uploads. On Vercel the deploy tree is read-only, so defaults to /tmp/...
  * Committed images in ./uploads are still served (see app.js read order).
  */
-const defaultUploadDir =
-  process.env.VERCEL === '1' ? path.join(os.tmpdir(), 'offerslu-uploads') : 'uploads';
-
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+
+const isVercelRuntime = () =>
+  process.env.VERCEL === '1' || process.env.VERCEL === 'true' || Boolean(process.env.VERCEL_ENV);
+
+const tmpUploadRoot = () => path.join(os.tmpdir(), 'offerslu-uploads');
+
+/** Joi default: prefer tmp on Vercel after dotenv (VERCEL is set by the platform). */
+const defaultUploadDir = isVercelRuntime() ? tmpUploadRoot() : 'uploads';
 
 const envSchema = Joi.object({
   NODE_ENV: Joi.string().valid('development', 'production', 'test').default('development'),
@@ -58,6 +63,35 @@ if (error) {
   process.exit(1);
 }
 
+const cwd = process.cwd();
+const resolvedConfiguredUpload = path.isAbsolute(env.UPLOAD_DIR)
+  ? path.normalize(env.UPLOAD_DIR)
+  : path.resolve(cwd, env.UPLOAD_DIR);
+
+/**
+ * Vercel: never write under /var/task (read-only). Many projects set UPLOAD_DIR=uploads in Vercel
+ * env (matching local .env), which would resolve to /var/task/uploads and cause ENOENT on mkdir.
+ */
+let uploadWriteRoot;
+let uploadDirEffective;
+if (isVercelRuntime()) {
+  const tmpRoot = tmpUploadRoot();
+  const underDeployTree =
+    resolvedConfiguredUpload === cwd ||
+    resolvedConfiguredUpload.startsWith(`${cwd}${path.sep}`) ||
+    resolvedConfiguredUpload.startsWith('/var/task');
+  if (underDeployTree) {
+    uploadWriteRoot = tmpRoot;
+    uploadDirEffective = tmpRoot;
+  } else {
+    uploadWriteRoot = resolvedConfiguredUpload;
+    uploadDirEffective = env.UPLOAD_DIR;
+  }
+} else {
+  uploadWriteRoot = resolvedConfiguredUpload;
+  uploadDirEffective = env.UPLOAD_DIR;
+}
+
 module.exports = {
   nodeEnv: env.NODE_ENV,
   isProd: env.NODE_ENV === 'production',
@@ -93,11 +127,11 @@ module.exports = {
   },
 
   upload: {
-    dir: env.UPLOAD_DIR,
-    /** Where multer/fs writes new files (tmp on Vercel, ./uploads locally). */
-    writeRoot: path.resolve(process.cwd(), env.UPLOAD_DIR),
+    dir: uploadDirEffective,
+    /** Where multer/fs writes new files (must be writable; on Vercel forced under /tmp if config pointed at project dir). */
+    writeRoot: uploadWriteRoot,
     /** Bundled repo folder (read-only on Vercel); used to serve images shipped with git. */
-    bundleRoot: path.resolve(process.cwd(), 'uploads'),
+    bundleRoot: path.resolve(cwd, 'uploads'),
     maxSizeBytes: env.MAX_UPLOAD_SIZE_MB * 1024 * 1024,
     heroImageMaxSizeBytes: env.HERO_IMAGE_MAX_SIZE_MB * 1024 * 1024,
   },
