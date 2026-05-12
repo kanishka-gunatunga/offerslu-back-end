@@ -58,11 +58,23 @@ Cookie used: `offerlu_admin_session` (`HttpOnly`, `SameSite=Lax`, `Path=/`, 7 da
 
 ### Admin Offers
 
-- `POST /admin/offers` (multipart, `heroImageFile` required)
-- `PATCH /admin/offers/:id` (multipart, `heroImageFile` optional)
+Multipart fields:
+
+- **Text:** `title`, `description`, `startDate`, `endDate` (ISO dates), `companyName` (**required on POST**), optional `offerDetails`, optional `companyLogoUrl` (string; ignored if you upload a logo file).
+- **Files:** `heroImageFile` (required on **POST**), `companyLogoFile` (optional on POST/PATCH).
+- **Relations (arrays):** `offerTypeIds`, `categoryIds`, `merchantIds`, `paymentIds`, `bankIds`, `locationIds` (same names as before; repeat keys or comma-separated as supported by the parser).
+
+Endpoints:
+
+- `POST /admin/offers` (multipart)
+- `PATCH /admin/offers/:id` (multipart; `heroImageFile` / `companyLogoFile` optional)
 - `GET /admin/offers`
 - `GET /admin/offers/:id`
 - `DELETE /admin/offers/:id` (soft delete only)
+
+**Limits:** Multer rejects any single file over `MAX_UPLOAD_SIZE_MB` (default 10 MB). After upload, hero and company logo are validated again to `HERO_IMAGE_MAX_SIZE_MB` (default 5 MB) and must be JPEG/PNG/WebP/GIF with a matching binary signature. Bodies are still subject to the Express urlencoded/json limits for non-file parts.
+
+**Vercel:** Files are written under `UPLOAD_DIR` (defaults to `/tmp/...` on Vercel); this is **ephemeral** serverless storage unless you add external object storage (S3, etc.).
 
 Dashboard list query params:
 `q`, `status`, `category`, `offerType`, `merchant`, `bank`, `location`, `sort`, `page`, `pageSize`.
@@ -85,6 +97,8 @@ Image fields:
 - categories: `bannerImageFile`
 - merchants: `logoImageFile`
 - banks: `logoImageFile`
+
+Same MIME/size rules as other admin uploads (`MAX_UPLOAD_SIZE_MB` per file, then signature check).
 
 ### Public
 

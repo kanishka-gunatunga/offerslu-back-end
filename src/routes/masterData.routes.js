@@ -16,11 +16,13 @@ router.use(verifyAdminOrigin);
 const masterUpload = upload.fields([
   { name: 'bannerImageFile', maxCount: 1 },
   { name: 'logoImageFile', maxCount: 1 },
+  { name: 'companyLogoFile', maxCount: 1 },
 ]);
 
 router.get('/:entity', validate(schemas.list), controller.list);
 router.post('/:entity', masterUpload, validate(schemas.create), controller.create);
 router.patch('/:entity/:id', masterUpload, validate(schemas.update), controller.update);
+router.post('/:entity/:id', masterUpload, validate(schemas.update), controller.update);
 router.delete('/:entity/:id', validate(schemas.byId), controller.remove);
 
 module.exports = router;

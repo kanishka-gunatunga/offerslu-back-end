@@ -67,7 +67,7 @@ const create = async (entity, payload, file) => {
 
     if (config.imageField) {
       if (file) {
-        ensureImageSignature(file);
+        ensureImageSignature(file, { field: config.imageField });
         uploaded = await saveImage({ entity: config.storageDir, entityId: created.id, file });
         await created.update({ [config.imageColumn]: uploaded.relativeUrl });
       }
@@ -94,7 +94,7 @@ const update = async (entity, id, payload, file) => {
     if (payload.status !== undefined) updates.status = payload.status;
 
     if (config.imageField && file) {
-      ensureImageSignature(file);
+      ensureImageSignature(file, { field: config.imageField });
       uploaded = await saveImage({ entity: config.storageDir, entityId: item.id, file });
       updates[config.imageColumn] = uploaded.relativeUrl;
     }

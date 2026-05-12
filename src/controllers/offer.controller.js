@@ -3,17 +3,22 @@
 const asyncHandler = require('../utils/asyncHandler');
 const offerService = require('../services/offer.service');
 
+const pickOfferFiles = (req) => ({
+  heroImageFile: req.files?.heroImageFile?.[0] || req.files?.bannerImageFile?.[0] || null,
+  companyLogoFile: req.files?.companyLogoFile?.[0] || null,
+});
+
 const create = asyncHandler(async (req, res) => {
-  const offer = await offerService.createOffer(req.body, req.files?.heroImageFile?.[0] || null);
+  if (req.body.id) {
+    const offer = await offerService.updateOffer(req.body.id, req.body, pickOfferFiles(req));
+    return res.status(200).json(offer);
+  }
+  const offer = await offerService.createOffer(req.body, pickOfferFiles(req));
   return res.status(201).json(offer);
 });
 
 const update = asyncHandler(async (req, res) => {
-  const offer = await offerService.updateOffer(
-    req.params.id,
-    req.body,
-    req.files?.heroImageFile?.[0] || null
-  );
+  const offer = await offerService.updateOffer(req.params.id, req.body, pickOfferFiles(req));
   return res.status(200).json(offer);
 });
 

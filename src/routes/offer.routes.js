@@ -15,18 +15,15 @@ router.use(verifyAdminOrigin);
 
 router.get('/', validate(schemas.list), controller.list);
 router.get('/:id', validate(schemas.byId), controller.getById);
-router.post(
-  '/',
-  upload.fields([{ name: 'heroImageFile', maxCount: 1 }]),
-  validate(schemas.create),
-  controller.create
-);
-router.patch(
-  '/:id',
-  upload.fields([{ name: 'heroImageFile', maxCount: 1 }]),
-  validate(schemas.update),
-  controller.update
-);
+const offerMultipart = upload.fields([
+  { name: 'heroImageFile', maxCount: 1 },
+  { name: 'bannerImageFile', maxCount: 1 },
+  { name: 'companyLogoFile', maxCount: 1 },
+]);
+
+router.post('/', offerMultipart, validate(schemas.create), controller.create);
+router.patch('/:id', offerMultipart, validate(schemas.update), controller.update);
+router.post('/:id', offerMultipart, validate(schemas.update), controller.update);
 router.delete('/:id', validate(schemas.byId), controller.remove);
 
 module.exports = router;

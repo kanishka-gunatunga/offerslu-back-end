@@ -20,15 +20,24 @@ const upload = multer({
   limits: { fileSize: env.upload.maxSizeBytes },
 });
 
-const ensureImageSignature = (file, { maxSizeBytes = env.upload.maxSizeBytes } = {}) => {
+const ensureImageSignature = (
+  file,
+  { maxSizeBytes = env.upload.maxSizeBytes, field = 'file' } = {}
+) => {
   if (!file) return;
   if (file.size > maxSizeBytes) {
-    throw ApiError.badRequest('Image exceeds size limit');
+    const mb = (maxSizeBytes / (1024 * 1024)).toFixed(1);
+    throw ApiError.badRequest('VALIDATION_ERROR', {
+      fields: [{ field, message: `Image exceeds size limit (${mb} MB max for this field)` }],
+    });
   }
 
+  // Relaxed image signature check to avoid rejecting valid images with unusual headers
   const detected = detectImageType(file.buffer);
-  if (!detected || !ALLOWED_IMAGE_MIME_TYPES.has(detected)) {
-    throw ApiError.badRequest('Invalid image signature');
+  if (detected && !ALLOWED_IMAGE_MIME_TYPES.has(detected)) {
+    throw ApiError.badRequest('VALIDATION_ERROR', {
+      fields: [{ field, message: 'Invalid image file (type not allowed)' }],
+    });
   }
 };
 

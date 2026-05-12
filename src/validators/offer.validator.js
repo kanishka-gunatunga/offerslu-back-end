@@ -10,7 +10,7 @@ const idArraySchema = Joi.alternatives().try(
 const create = {
   body: Joi.object({
     title: Joi.string().trim().min(1).max(255).required(),
-    companyName: Joi.string().trim().min(1).max(160).optional(),
+    companyName: Joi.string().trim().min(1).max(160).allow('').optional(),
     companyLogoUrl: Joi.string().trim().allow('').optional(),
     description: Joi.string().trim().min(1).required(),
     offerDetails: Joi.string().trim().allow('').optional(),

@@ -157,16 +157,28 @@ const enrichCompanyInfo = async (payload) => {
   };
 };
 
-const createOffer = async (rawPayload, file) => {
+const createOffer = async (rawPayload, files = {}) => {
+  const heroFile = files.heroImageFile || null;
+  const companyLogoFile = files.companyLogoFile || null;
+
   const payload = await enrichCompanyInfo(parsePayload(rawPayload));
   assertCreatePayload(payload);
-  if (!file) {
+  if (!heroFile) {
     throw ApiError.badRequest('VALIDATION_ERROR', {
       fields: [{ field: 'heroImageFile', message: 'Required for create' }],
     });
   }
 
-  ensureImageSignature(file, { maxSizeBytes: env.upload.heroImageMaxSizeBytes });
+  ensureImageSignature(heroFile, {
+    maxSizeBytes: env.upload.heroImageMaxSizeBytes,
+    field: 'heroImageFile',
+  });
+  if (companyLogoFile) {
+    ensureImageSignature(companyLogoFile, {
+      maxSizeBytes: env.upload.heroImageMaxSizeBytes,
+      field: 'companyLogoFile',
+    });
+  }
 
   await Promise.all(
     [
@@ -182,7 +194,8 @@ const createOffer = async (rawPayload, file) => {
   );
 
   const t = await sequelize.transaction();
-  let uploaded = null;
+  let uploadedHero = null;
+  let uploadedCompanyLogo = null;
 
   try {
     const offer = await Offer.create(
@@ -199,8 +212,17 @@ const createOffer = async (rawPayload, file) => {
       { transaction: t }
     );
 
-    uploaded = await saveImage({ entity: 'offers', entityId: offer.id, file });
-    await offer.update({ heroImageUrl: uploaded.relativeUrl }, { transaction: t });
+    uploadedHero = await saveImage({ entity: 'offers', entityId: offer.id, file: heroFile });
+    await offer.update({ heroImageUrl: uploadedHero.relativeUrl }, { transaction: t });
+
+    if (companyLogoFile) {
+      uploadedCompanyLogo = await saveImage({
+        entity: 'offers',
+        entityId: offer.id,
+        file: companyLogoFile,
+      });
+      await offer.update({ companyLogoUrl: uploadedCompanyLogo.relativeUrl }, { transaction: t });
+    }
 
     await Promise.all([
       offer.setOfferTypes(payload.offerTypeIds, { transaction: t }),
@@ -216,12 +238,16 @@ const createOffer = async (rawPayload, file) => {
     return toAdminOffer(created);
   } catch (err) {
     await t.rollback();
-    if (uploaded?.relativeUrl) await removeByUrl(uploaded.relativeUrl);
+    if (uploadedHero?.relativeUrl) await removeByUrl(uploadedHero.relativeUrl);
+    if (uploadedCompanyLogo?.relativeUrl) await removeByUrl(uploadedCompanyLogo.relativeUrl);
     throw err;
   }
 };
 
-const updateOffer = async (id, rawPayload, file) => {
+const updateOffer = async (id, rawPayload, files = {}) => {
+  const heroFile = files.heroImageFile || null;
+  const companyLogoFile = files.companyLogoFile || null;
+
   const offer = await Offer.findByPk(id, { include: offerIncludes });
   if (!offer) throw ApiError.notFound('NOT_FOUND');
 
@@ -231,8 +257,10 @@ const updateOffer = async (id, rawPayload, file) => {
   }
 
   const t = await sequelize.transaction();
-  let uploaded = null;
+  let uploadedHero = null;
+  let uploadedCompanyLogo = null;
   let previousHeroImageUrl = null;
+  let previousCompanyLogoUrl = null;
 
   try {
     if (payload.offerTypeIds && payload.offerTypeIds.length)
@@ -257,11 +285,28 @@ const updateOffer = async (id, rawPayload, file) => {
     if (payload.companyName !== undefined) updates.companyName = payload.companyName;
     if (payload.companyLogoUrl !== undefined) updates.companyLogoUrl = payload.companyLogoUrl;
 
-    if (file) {
-      ensureImageSignature(file, { maxSizeBytes: env.upload.heroImageMaxSizeBytes });
+    if (heroFile) {
+      ensureImageSignature(heroFile, {
+        maxSizeBytes: env.upload.heroImageMaxSizeBytes,
+        field: 'heroImageFile',
+      });
       previousHeroImageUrl = offer.heroImageUrl;
-      uploaded = await saveImage({ entity: 'offers', entityId: offer.id, file });
-      updates.heroImageUrl = uploaded.relativeUrl;
+      uploadedHero = await saveImage({ entity: 'offers', entityId: offer.id, file: heroFile });
+      updates.heroImageUrl = uploadedHero.relativeUrl;
+    }
+
+    if (companyLogoFile) {
+      ensureImageSignature(companyLogoFile, {
+        maxSizeBytes: env.upload.heroImageMaxSizeBytes,
+        field: 'companyLogoFile',
+      });
+      previousCompanyLogoUrl = offer.companyLogoUrl;
+      uploadedCompanyLogo = await saveImage({
+        entity: 'offers',
+        entityId: offer.id,
+        file: companyLogoFile,
+      });
+      updates.companyLogoUrl = uploadedCompanyLogo.relativeUrl;
     }
 
     if (Object.keys(updates).length > 0) {
@@ -284,17 +329,25 @@ const updateOffer = async (id, rawPayload, file) => {
 
     if (
       previousHeroImageUrl &&
-      uploaded?.relativeUrl &&
-      previousHeroImageUrl !== uploaded.relativeUrl
+      uploadedHero?.relativeUrl &&
+      previousHeroImageUrl !== uploadedHero.relativeUrl
     ) {
       await removeByUrl(previousHeroImageUrl);
+    }
+    if (
+      previousCompanyLogoUrl &&
+      uploadedCompanyLogo?.relativeUrl &&
+      previousCompanyLogoUrl !== uploadedCompanyLogo.relativeUrl
+    ) {
+      await removeByUrl(previousCompanyLogoUrl);
     }
 
     const updated = await Offer.findByPk(id, { include: offerIncludes });
     return toAdminOffer(updated);
   } catch (err) {
     await t.rollback();
-    if (uploaded?.relativeUrl) await removeByUrl(uploaded.relativeUrl);
+    if (uploadedHero?.relativeUrl) await removeByUrl(uploadedHero.relativeUrl);
+    if (uploadedCompanyLogo?.relativeUrl) await removeByUrl(uploadedCompanyLogo.relativeUrl);
     throw err;
   }
 };

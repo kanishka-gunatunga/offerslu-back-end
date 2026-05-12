@@ -24,7 +24,34 @@ const errorHandler = (err, req, res, _next) => {
   } else if (error instanceof DatabaseError) {
     error = ApiError.internal('Database error');
   } else if (error instanceof multer.MulterError) {
-    error = ApiError.badRequest(`Upload error: ${error.message}`);
+    const maxMb = (env.upload.maxSizeBytes / (1024 * 1024)).toFixed(1);
+    const field = error.field || 'file';
+    let details;
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      details = {
+        fields: [
+          {
+            field,
+            message: `File too large before processing (multer limit ${maxMb} MB per file). Raise MAX_UPLOAD_SIZE_MB or use a smaller file.`,
+          },
+        ],
+      };
+    } else if (error.code === 'LIMIT_UNEXPECTED_FILE') {
+      details = {
+        fields: [
+          {
+            field,
+            message:
+              'Unexpected file field name. For offers use heroImageFile and companyLogoFile; master data uses bannerImageFile or logoImageFile.',
+          },
+        ],
+      };
+    } else {
+      details = {
+        fields: [{ field, message: error.message || 'Upload rejected' }],
+      };
+    }
+    error = ApiError.badRequest(error.code || 'MULTER_ERROR', details);
   } else if (!(error instanceof ApiError)) {
     const statusCode = error.statusCode || 500;
     error = new ApiError(
