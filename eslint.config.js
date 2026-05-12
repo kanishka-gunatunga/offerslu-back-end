@@ -6,7 +6,15 @@ const prettierConfig = require('eslint-config-prettier');
 
 module.exports = [
   {
-    ignores: ['node_modules/**', 'logs/**', 'uploads/**', 'coverage/**', 'dist/**', 'build/**'],
+    ignores: [
+      'node_modules/**',
+      'logs/**',
+      'uploads/**',
+      'coverage/**',
+      'dist/**',
+      'build/**',
+      '.history/**',
+    ],
   },
   js.configs.recommended,
   {

@@ -34,7 +34,11 @@ const envSchema = Joi.object({
   TRUSTED_ORIGINS: Joi.string().allow('').default(''),
 
   RATE_LIMIT_WINDOW_MS: Joi.number().default(15 * 60 * 1000),
-  RATE_LIMIT_MAX: Joi.number().default(300),
+  /** Global limit (per IP). Public GETs under `${API_PREFIX}/public/*`, `${API_PREFIX}/health`, and GET `/uploads/*` are exempt — see rateLimit middleware. */
+  RATE_LIMIT_MAX: Joi.number().default(3000),
+  /** Max admin write requests (POST/PATCH/PUT/DELETE) per window per IP on `/admin/offers` and `/admin/master-data`. */
+  RATE_LIMIT_MAX_ADMIN_WRITE: Joi.number().default(200),
+  RATE_LIMIT_ADMIN_WRITE_WINDOW_MS: Joi.number().default(15 * 60 * 1000),
   LOGIN_RATE_LIMIT_MAX: Joi.number().default(10),
 
   UPLOAD_DIR: Joi.string().default(defaultUploadDir),
@@ -83,6 +87,8 @@ module.exports = {
   rateLimit: {
     windowMs: env.RATE_LIMIT_WINDOW_MS,
     max: env.RATE_LIMIT_MAX,
+    adminWriteMax: env.RATE_LIMIT_MAX_ADMIN_WRITE,
+    adminWriteWindowMs: env.RATE_LIMIT_ADMIN_WRITE_WINDOW_MS,
     loginMax: env.LOGIN_RATE_LIMIT_MAX,
   },
 

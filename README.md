@@ -60,7 +60,7 @@ Cookie used: `offerlu_admin_session` (`HttpOnly`, `SameSite=Lax`, `Path=/`, 7 da
 
 Multipart fields:
 
-- **Text:** `title`, `description`, `startDate`, `endDate` (ISO dates), `companyName` (**required on POST**), optional `offerDetails`, optional `companyLogoUrl` (string; ignored if you upload a logo file).
+- **Text:** `title`, `description`, `startDate`, `endDate` (ISO dates), optional `companyName` (or omit and derive from first selected merchant), optional `offerDetails`, optional `companyLogoUrl` (string; ignored if you upload a logo file).
 - **Files:** `heroImageFile` (required on **POST**), `companyLogoFile` (optional on POST/PATCH).
 - **Relations (arrays):** `offerTypeIds`, `categoryIds`, `merchantIds`, `paymentIds`, `bankIds`, `locationIds` (same names as before; repeat keys or comma-separated as supported by the parser).
 
@@ -100,12 +100,63 @@ Image fields:
 
 Same MIME/size rules as other admin uploads (`MAX_UPLOAD_SIZE_MB` per file, then signature check).
 
-### Public
+### Public read API (SSR-friendly)
 
-- `GET /public/site-content`
+All paths below are prefixed with `${API_PREFIX}` (default `/api`; production may use `/api/v1`).
 
-Returns:
-`siteName`, `hero`, `categories`, `promotionSections`, `promotions`, `banks`, `about`, `socialLinks`.
+| Method | Path | Notes |
+|--------|------|--------|
+| `GET` | `/health` | Small JSON `{ ok, timestamp }`. **Not counted** toward the global rate limit. |
+| `GET` | `/public/site-content` | Homepage payload. **Not counted** toward the global rate limit. |
+| `GET` | `/public/promotions` | Query: `category` (required). **Not counted** toward global limit. |
+| `GET` | `/public/promotions/search` | Query params for search. **Not counted** toward global limit. |
+| `GET` | `/public/promotions/search-filters` | Filter options. **Not counted** toward global limit. |
+| `GET` | `/public/promotions/:id` | Single promotion. **Not counted** toward global limit. |
+
+**`GET .../public/site-content` response contract** (always `200` + `Content-Type: application/json` on success):
+
+- `siteName` (string)
+- `hero` (object; may be empty `{}`)
+- `categories` (array of `{ id, name, bannerImageUrl, offerCount }`)
+- `promotionSections` (array; may be empty)
+- `promotions` (array of promotion objects)
+- `banks` (array of `{ id, name, logoUrl, offerCount }`)
+- `about` (object; may be empty `{}`)
+- `socialLinks` (array; may be empty)
+
+Promotion objects in lists include at least: `id`, `title`, `description`, `offerBannerImageUrl`, `startDate`, `endDate`, `merchant`, `category`, `offerType`, `daysLeft`.
+
+Errors from this API use the standard JSON error shape from `error.middleware` (`4xx`/`5xx` with `{ error: { code, message, ... } }`), not HTML.
+
+## Rate limiting
+
+**How requests are keyed:** The global limiter uses **express-rate-limit defaults** → primarily **per client IP** (`req.ip`), after `trust proxy` (enabled on Vercel so `X-Forwarded-For` is honored). There is no separate bucket per logged-in user on public routes.
+
+**SSR / Vercel:** Next.js server-side `fetch` to this API often shares **one or a few egress IPs**. Without exemptions, many parallel `GET`s per page could exhaust a single shared bucket.
+
+**What we do:**
+
+1. **Global limit** (`RATE_LIMIT_MAX` per `RATE_LIMIT_WINDOW_MS`, default **3000 / 15 minutes**) applies to routes that are **not** exempted below.
+2. **Exempt from the global limiter** (no consumption of the global bucket):
+   - `GET`/`HEAD` `${API_PREFIX}/public` and everything under it (all public read endpoints above).
+   - `GET`/`HEAD` `${API_PREFIX}/health`.
+   - `GET`/`HEAD` `/uploads/...` (static images).
+3. **Admin writes:** `POST` / `PATCH` / `PUT` / `DELETE` on `/admin/offers` and `/admin/master-data` use a **separate** limiter: `RATE_LIMIT_MAX_ADMIN_WRITE` per `RATE_LIMIT_ADMIN_WRITE_WINDOW_MS` (defaults **200 / 15 minutes** per IP). `GET` list/detail on those routers is not affected by this write limiter.
+4. **Login:** `POST /admin/auth/login` keeps its own limiter (`LOGIN_RATE_LIMIT_MAX`, default **10** per window).
+
+**429 responses:** All limiters return **JSON** `{ error: { code: "RATE_LIMITED", message, retryAfterSeconds } }` and an HTTP **`Retry-After`** header (seconds, whole window). Logs: `rate_limit_429`, `rate_limit_429_admin_write`, `rate_limit_429_login` with `path`, `method`, and `clientKeyHash` (SHA-256 of IP, truncated) for coarse observability without storing raw IPs in log lines.
+
+**Env summary:**
+
+| Variable | Default | Role |
+|----------|---------|------|
+| `RATE_LIMIT_WINDOW_MS` | `900000` (15 min) | Global + login window |
+| `RATE_LIMIT_MAX` | `3000` | Global max hits per IP per window (non-exempt routes) |
+| `RATE_LIMIT_MAX_ADMIN_WRITE` | `200` | Admin offer/master-data writes per IP per admin-write window |
+| `RATE_LIMIT_ADMIN_WRITE_WINDOW_MS` | `900000` | Window for admin write limiter |
+| `LOGIN_RATE_LIMIT_MAX` | `10` | Login attempts per window |
+
+Tune `RATE_LIMIT_MAX` upward in production if needed; public `GET /public/*` traffic should not drive global usage anymore.
 
 ## Scripts
 

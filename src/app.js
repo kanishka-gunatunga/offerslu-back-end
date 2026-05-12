@@ -9,9 +9,8 @@ const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const morgan = require('morgan');
 const compression = require('compression');
-const rateLimit = require('express-rate-limit');
-
 const env = require('./config/env');
+const { createGlobalLimiter } = require('./middlewares/rateLimit.middleware');
 const logger = require('./config/logger');
 const routes = require('./routes');
 const { notFoundHandler, errorHandler } = require('./middlewares/error.middleware');
@@ -58,19 +57,7 @@ app.use(
   })
 );
 
-const apiPrefixNorm = env.apiPrefix.replace(/\/$/, '') || env.apiPrefix;
-const publicReadPathPrefix = `${apiPrefixNorm}/public`;
-
-const globalLimiter = rateLimit({
-  windowMs: env.rateLimit.windowMs,
-  max: env.rateLimit.max,
-  standardHeaders: true,
-  legacyHeaders: false,
-  skip: (req) =>
-    req.method === 'GET' &&
-    typeof req.path === 'string' &&
-    req.path.startsWith(publicReadPathPrefix),
-});
+const globalLimiter = createGlobalLimiter(env);
 app.use(globalLimiter);
 
 const uploadWriteRootResolved = env.upload.writeRoot;
