@@ -32,6 +32,7 @@ const login429Handler = (req, res, _next, options) => {
     clientKeyHash: hashClientBucket(req),
   });
   res.status(429).json({
+    message: 'Too many login attempts. Please try again later.',
     error: {
       code: 'RATE_LIMITED',
       message: 'Too many login attempts. Please try again later.',
@@ -49,6 +50,7 @@ const json429Handler = (logEvent) => (req, res, _next, options) => {
     clientKeyHash: hashClientBucket(req),
   });
   res.status(429).json({
+    message: 'Too many requests. Please try again later.',
     error: {
       code: 'RATE_LIMITED',
       message: 'Too many requests. Please try again later.',

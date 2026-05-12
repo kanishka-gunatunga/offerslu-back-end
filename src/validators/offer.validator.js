@@ -31,7 +31,7 @@ const update = {
   }),
   body: Joi.object({
     title: Joi.string().trim().min(1).max(255),
-    companyName: Joi.string().trim().min(1).max(160).optional(),
+    companyName: Joi.string().trim().min(1).max(160).allow('').optional(),
     companyLogoUrl: Joi.string().trim().allow('').optional(),
     description: Joi.string().trim().min(1),
     offerDetails: Joi.string().trim().allow(''),

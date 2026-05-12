@@ -71,20 +71,32 @@ const errorHandler = (err, req, res, _next) => {
   if (error.statusCode >= 500) {
     logger.error(`${error.message} ${JSON.stringify(logMeta)}\n${err.stack || ''}`);
   } else {
-    logger.warn(`${error.message} ${JSON.stringify(logMeta)}`);
+    const warnMeta = { ...logMeta };
+    if (error.statusCode === 400 && error.details?.fields?.length) {
+      warnMeta.validationFields = error.details.fields.map((f) => f.field).filter(Boolean);
+    }
+    logger.warn(`${error.message} ${JSON.stringify(warnMeta)}`);
   }
 
-  const body = {
-    error: {
-      code: error.message || 'INTERNAL_ERROR',
-      message: error.message || 'Internal Server Error',
-    },
-  };
-  if (error.details?.fields) {
-    body.error.fields = error.details.fields.reduce((acc, item) => {
+  const humanMessage = error.message || 'Internal Server Error';
+  const fieldMap =
+    error.details?.fields?.reduce((acc, item) => {
       if (item.field) acc[item.field] = item.message;
       return acc;
-    }, {});
+    }, {}) || undefined;
+
+  const body = {
+    /** Top-level copy for admin / Next.js clients that read `message` first */
+    message: humanMessage,
+    error: {
+      code: humanMessage,
+      message: humanMessage,
+    },
+  };
+  if (fieldMap && Object.keys(fieldMap).length > 0) {
+    body.error.fields = fieldMap;
+    /** Alternate shape some front-ends expect */
+    body.errors = fieldMap;
   }
   if (!env.isProd && err.stack) body.error.stack = err.stack;
 

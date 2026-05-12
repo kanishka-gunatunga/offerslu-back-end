@@ -62,7 +62,11 @@ Multipart fields:
 
 - **Text:** `title`, `description`, `startDate`, `endDate` (ISO dates), optional `companyName` (or omit and derive from first selected merchant), optional `offerDetails`, optional `companyLogoUrl` (string; ignored if you upload a logo file).
 - **Files:** `heroImageFile` (required on **POST**), `companyLogoFile` (optional on POST/PATCH).
-- **Relations (arrays):** `offerTypeIds`, `categoryIds`, `merchantIds`, `paymentIds`, `bankIds`, `locationIds` (same names as before; repeat keys or comma-separated as supported by the parser).
+- **Relations (arrays):** `offerTypeIds`, `categoryIds`, `merchantIds`, `paymentIds`, `bankIds`, `locationIds` — repeat keys, comma-separated strings, JSON arrays, **or bracket-style names** (`merchantIds[]`, `offerTypeIds[]`, …) as sent by many HTML forms and Next.js actions. Bracket keys are normalized before Joi so they are not dropped by `stripUnknown`.
+
+**JSON errors (4xx/5xx):** Responses include top-level `message` (same text as `error.message`), nested `error: { code, message, fields? }`, and for validation failures a flat `errors` object (field → message) alongside `error.fields` for compatibility with different admin clients.
+
+**`companyName`:** Not required on create; if omitted and `merchantIds` are present, the service fills `companyName` / logo from the first merchant.
 
 Endpoints:
 

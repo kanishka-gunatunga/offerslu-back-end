@@ -6,6 +6,7 @@ const { validate } = require('../middlewares/validate.middleware');
 const { authenticate } = require('../middlewares/auth.middleware');
 const { verifyAdminOrigin } = require('../middlewares/csrf.middleware');
 const { upload } = require('../middlewares/upload.middleware');
+const { normalizeOfferFormBody } = require('../middlewares/normalizeOfferFormBody.middleware');
 const schemas = require('../validators/offer.validator');
 
 const router = express.Router();
@@ -21,9 +22,27 @@ const offerMultipart = upload.fields([
   { name: 'companyLogoFile', maxCount: 1 },
 ]);
 
-router.post('/', offerMultipart, validate(schemas.create), controller.create);
-router.patch('/:id', offerMultipart, validate(schemas.update), controller.update);
-router.post('/:id', offerMultipart, validate(schemas.update), controller.update);
+router.post(
+  '/',
+  offerMultipart,
+  normalizeOfferFormBody,
+  validate(schemas.create),
+  controller.create
+);
+router.patch(
+  '/:id',
+  offerMultipart,
+  normalizeOfferFormBody,
+  validate(schemas.update),
+  controller.update
+);
+router.post(
+  '/:id',
+  offerMultipart,
+  normalizeOfferFormBody,
+  validate(schemas.update),
+  controller.update
+);
 router.delete('/:id', validate(schemas.byId), controller.remove);
 
 module.exports = router;
