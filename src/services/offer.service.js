@@ -33,12 +33,15 @@ const offerIncludes = [
 
 const toAdminOffer = (offerInstance) => {
   const offer = offerInstance.toJSON();
+  const heroAbsolute = toAbsoluteAssetUrl(offer.heroImageUrl);
   return {
     id: offer.id,
     title: offer.title,
     companyName: offer.companyName,
     companyLogoUrl: toAbsoluteAssetUrl(offer.companyLogoUrl || '') || '',
-    heroImageUrl: toAbsoluteAssetUrl(offer.heroImageUrl),
+    heroImageUrl: heroAbsolute,
+    /** Same URL as public `offerBannerImageUrl` — keeps admin + public clients aligned */
+    offerBannerImageUrl: heroAbsolute,
     description: offer.description,
     offerDetails: offer.offerDetails,
     category: (offer.categories || []).map((item) => item.name).join(', '),

@@ -76,6 +76,8 @@ Endpoints:
 - `GET /admin/offers/:id`
 - `DELETE /admin/offers/:id` (soft delete only)
 
+**Admin JSON shape:** Each offer includes **`heroImageUrl`** and **`offerBannerImageUrl`** (same absolute URL, mirrors public naming). Useful when the admin UI expects the public field name.
+
 **Limits:** Multer rejects any single file over `MAX_UPLOAD_SIZE_MB` (default 10 MB). After upload, hero and company logo are validated again to `HERO_IMAGE_MAX_SIZE_MB` (default 5 MB) and must be JPEG/PNG/WebP/GIF with a matching binary signature. Bodies are still subject to the Express urlencoded/json limits for non-file parts.
 
 **Vercel:** The deploy tree (`/var/task`) is **read-only**. If `UPLOAD_DIR` resolves under the project or `/var/task`, the server **automatically writes new uploads under** `os.tmpdir()/offerslu-uploads` instead (so `mkdir` does not fail). That storage is **ephemeral** (and a different path per invocation); use **S3 / Vercel Blob / Cloudinary** for production-persistent images. Set `PUBLIC_ASSET_BASE_URL` so `/uploads/...` URLs resolve to this API host.
@@ -131,6 +133,14 @@ All paths below are prefixed with `${API_PREFIX}` (default `/api`; production ma
 Promotion objects in lists include at least: `id`, `title`, `description`, `offerBannerImageUrl`, `startDate`, `endDate`, `merchant`, `category`, `offerType`, `daysLeft`.
 
 Errors from this API use the standard JSON error shape from `error.middleware` (`4xx`/`5xx` with `{ error: { code, message, ... } }`), not HTML.
+
+**Caching & SSR:** Every `GET` under `/public` sends  
+`Cache-Control: public, max-age=0, s-maxage=30, stale-while-revalidate=120`  
+so CDNs / edge can absorb bursts from Next.js SSR without hiding fresh content from browsers for long (`max-age=0`).
+
+**Observability:** Each public response emits a structured log line (`public_route` JSON with `path`, `method`, `statusCode`, `ms`). Responses slower than **2s** add `"slow":true` and log at **warn** — use these lines to correlate failures with deploys, DB latency, or spikes after admin publishes.
+
+**Images vs “site down”:** If **`GET /public/site-content` returns 200** but images are broken, the API JSON path is fine — banner URLs often **404** on serverless when files live only on ephemeral disk (`/tmp`). Fix: **object storage** (S3, Vercel Blob, Cloudinary) + stable URLs; set **`PUBLIC_ASSET_BASE_URL`** if the browser loads the admin or storefront from another origin than the API.
 
 ## Rate limiting
 
