@@ -5,7 +5,7 @@ const Joi = require('joi');
 const login = {
   body: Joi.object({
     password: Joi.string().min(6).max(128).required(),
-  }),
+  }).unknown(true),
 };
 
 module.exports = { login };

@@ -33,6 +33,11 @@ class ApiError extends Error {
   static internal(message = 'Internal Server Error', details) {
     return new ApiError(500, message, details, false);
   }
+
+  /** Transient failures (e.g. DB unreachable) — not invalid credentials */
+  static serviceUnavailable(message = 'Service temporarily unavailable', details) {
+    return new ApiError(503, message, details, true);
+  }
 }
 
 module.exports = ApiError;
