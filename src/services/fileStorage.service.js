@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const fs = require('fs/promises');
 const path = require('path');
+const { put, del } = require('@vercel/blob');
 
 const env = require('../config/env');
 
@@ -21,10 +22,26 @@ const fileExt = (mimeType) => {
 };
 
 const saveImage = async ({ entity, entityId, file }) => {
+  const filename = `${crypto.randomUUID()}${fileExt(file.mimetype)}`;
+
+  // If Vercel Blob token is configured, use it
+  if (env.blobToken) {
+    const pathname = `${entity}/${entityId}/${filename}`;
+    const blob = await put(pathname, file.buffer, {
+      access: 'public',
+      token: env.blobToken,
+      contentType: file.mimetype,
+    });
+    return {
+      absolutePath: blob.url,
+      relativeUrl: blob.url,
+    };
+  }
+
+  // Fallback to local storage (for local development/testing without token)
   const dir = path.join(uploadWriteRoot, entity, entityId);
   await ensureDir(dir);
 
-  const filename = `${crypto.randomUUID()}${fileExt(file.mimetype)}`;
   const absolutePath = path.join(dir, filename);
   await fs.writeFile(absolutePath, file.buffer);
 
@@ -35,6 +52,23 @@ const saveImage = async ({ entity, entityId, file }) => {
 const removeByUrl = async (urlPath) => {
   if (!urlPath) return;
 
+  // Check if it's a Vercel Blob URL (starts with http/https and contains vercel-storage)
+  if (/^https?:\/\//i.test(urlPath) && urlPath.includes('vercel-storage.com')) {
+    if (!env.blobToken) {
+      console.warn('Vercel Blob token not configured; skipping deletion for URL:', urlPath);
+      return;
+    }
+    try {
+      await del(urlPath, {
+        token: env.blobToken,
+      });
+    } catch (err) {
+      console.error('Failed to delete image from Vercel Blob:', err);
+    }
+    return;
+  }
+
+  // Otherwise treat as local path
   let relative = String(urlPath).replace(/^\/+/, '');
   if (relative.startsWith('uploads/')) {
     relative = relative.slice('uploads/'.length);
