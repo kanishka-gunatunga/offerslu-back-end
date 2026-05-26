@@ -54,6 +54,9 @@ const envSchema = Joi.object({
 
   /** Optional. Full origin of this API (e.g. https://api-xx.vercel.app) so image URLs work from a separate frontend host. */
   PUBLIC_ASSET_BASE_URL: Joi.string().trim().allow('').default(''),
+
+  /** Vercel Blob read/write token for serverless image uploads. */
+  BLOB_READ_WRITE_TOKEN: Joi.string().trim().allow('').default(''),
 }).unknown(true);
 
 const { value: env, error } = envSchema.validate(process.env, { abortEarly: false });
@@ -139,4 +142,6 @@ module.exports = {
   logLevel: env.LOG_LEVEL,
 
   publicAssetBaseUrl: env.PUBLIC_ASSET_BASE_URL || '',
+
+  blobToken: env.BLOB_READ_WRITE_TOKEN || '',
 };
