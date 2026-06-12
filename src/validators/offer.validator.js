@@ -52,6 +52,7 @@ const list = {
     pageSize: Joi.number().integer().min(5).max(50).default(10),
     q: Joi.string().trim().max(200).allow(''),
     status: Joi.string().valid('active', 'upcoming', 'expired', 'inactive', 'all').default('all'),
+    expiringWithinDays: Joi.number().integer().min(1).max(90),
     category: Joi.string().trim(),
     offerType: Joi.string().trim(),
     merchant: Joi.string().trim(),

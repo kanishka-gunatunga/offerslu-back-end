@@ -12,7 +12,11 @@ const {
   sequelize,
 } = require('../models');
 const ApiError = require('../utils/ApiError');
-const { todayDateOnly, buildActiveOfferWhere } = require('../utils/offerActiveFilter');
+const {
+  todayDateOnly,
+  buildActiveOfferWhere,
+  buildExpiringSoonOfferWhere,
+} = require('../utils/offerActiveFilter');
 const env = require('../config/env');
 const { ensureImageSignature } = require('../middlewares/upload.middleware');
 const { saveImage, removeByUrl } = require('./fileStorage.service');
@@ -394,9 +398,11 @@ const listOffers = async (query) => {
   const pageSize = Math.min(Math.max(Number(query.pageSize) || 10, 5), 50);
   const offset = (page - 1) * pageSize;
 
-  const where = {
-    ...buildStatusWhere(query.status),
-  };
+  const where = query.expiringWithinDays
+    ? buildExpiringSoonOfferWhere(query.expiringWithinDays)
+    : {
+        ...buildStatusWhere(query.status),
+      };
 
   if (query.q) {
     const like = `%${String(query.q).trim()}%`;
