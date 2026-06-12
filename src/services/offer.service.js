@@ -12,6 +12,7 @@ const {
   sequelize,
 } = require('../models');
 const ApiError = require('../utils/ApiError');
+const { todayDateOnly, buildActiveOfferWhere } = require('../utils/offerActiveFilter');
 const env = require('../config/env');
 const { ensureImageSignature } = require('../middlewares/upload.middleware');
 const { saveImage, removeByUrl } = require('./fileStorage.service');
@@ -371,18 +372,12 @@ const getOffer = async (id) => {
 };
 
 const buildStatusWhere = (status) => {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayDateOnly();
   if (!status || status === 'all') return {};
   if (status === 'inactive') return { isInactive: true };
   if (status === 'upcoming') return { isInactive: false, startDate: { [Op.gt]: today } };
   if (status === 'expired') return { isInactive: false, endDate: { [Op.lt]: today } };
-  if (status === 'active') {
-    return {
-      isInactive: false,
-      startDate: { [Op.lte]: today },
-      endDate: { [Op.gte]: today },
-    };
-  }
+  if (status === 'active') return buildActiveOfferWhere(today);
   return {};
 };
 
@@ -458,7 +453,6 @@ const listOffers = async (query) => {
     limit: pageSize,
     offset,
     distinct: true,
-    subQuery: false,
   });
 
   return {

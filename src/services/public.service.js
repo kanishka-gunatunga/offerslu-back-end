@@ -82,6 +82,11 @@ const buildTextLike = (columnPath, qLike) =>
   sequelize.where(sequelize.fn('LOWER', sequelize.col(columnPath)), { [Op.like]: qLike });
 
 const { toAbsoluteAssetUrl } = require('../utils/assetUrl');
+const {
+  todayDateOnly,
+  buildActiveOfferWhere,
+  activeOfferSqlConditions,
+} = require('../utils/offerActiveFilter');
 
 const mapPromotion = (
   offer,
@@ -147,7 +152,7 @@ const getPromotionSearchFilters = async () => {
 };
 
 const searchPromotions = async (query = {}) => {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayDateOnly();
   const q = normalizeTag(query.q);
   const categoryNamesLower = toLowerSet(parseCsvNames(query.categories));
   const offerTypeNamesLower = toLowerSet(parseCsvNames(query.offerTypes));
@@ -197,8 +202,7 @@ const searchPromotions = async (query = {}) => {
   ];
 
   const where = {
-    isInactive: false,
-    endDate: { [Op.gte]: today },
+    ...buildActiveOfferWhere(today),
   };
 
   if (q) {
@@ -227,7 +231,9 @@ const searchPromotions = async (query = {}) => {
 };
 
 const getSiteContent = async () => {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayDateOnly();
+  const activeOfferWhere = buildActiveOfferWhere(today);
+  const activeOfferSql = activeOfferSqlConditions();
 
   const [categories, banks, promotions, offerCountRows, bankOfferCountRows] = await Promise.all([
     Category.findAll({
@@ -237,10 +243,7 @@ const getSiteContent = async () => {
     }),
     Bank.findAll({ where: { status: 'active' }, order: [['name', 'ASC']], limit: 20 }),
     Offer.findAll({
-      where: {
-        isInactive: false,
-        endDate: { [Op.gte]: today },
-      },
+      where: activeOfferWhere,
       include: [
         { model: OfferType, as: 'offerTypes', through: { attributes: [] }, attributes: ['name'] },
         {
@@ -261,10 +264,10 @@ const getSiteContent = async () => {
           COUNT(oc.offer_id) AS offerCount
         FROM offer_categories oc
         INNER JOIN offers o ON o.id = oc.offer_id
-        WHERE o.is_inactive = false
+        WHERE ${activeOfferSql}
         GROUP BY oc.category_id
       `,
-      { type: QueryTypes.SELECT }
+      { type: QueryTypes.SELECT, replacements: { today } }
     ),
     sequelize.query(
       `
@@ -273,8 +276,7 @@ const getSiteContent = async () => {
           COUNT(ob.offer_id) AS offerCount
         FROM offer_banks ob
         INNER JOIN offers o ON o.id = ob.offer_id
-        WHERE o.is_inactive = false
-          AND o.end_date >= :today
+        WHERE ${activeOfferSql}
         GROUP BY ob.bank_id
       `,
       { type: QueryTypes.SELECT, replacements: { today } }
@@ -314,13 +316,8 @@ const getSiteContent = async () => {
 };
 
 const getPromotionsByCategory = async (categoryName) => {
-  const today = new Date().toISOString().slice(0, 10);
-
   const promotions = await Offer.findAll({
-    where: {
-      isInactive: false,
-      endDate: { [Op.gte]: today },
-    },
+    where: buildActiveOfferWhere(),
     include: [
       { model: OfferType, as: 'offerTypes', through: { attributes: [] }, attributes: ['name'] },
       {
